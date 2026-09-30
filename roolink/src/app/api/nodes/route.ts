@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { globalGraph } from '@/lib/graph';
 import { extractGraphData, extractVideoGraphData, detectSemanticRelationships } from '@/lib/gemini';
+import { Innertube } from 'youtubei.js';
 import { YoutubeTranscript } from 'youtube-transcript';
 
 export const dynamic = 'force-dynamic';
@@ -29,12 +30,17 @@ export async function DELETE(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    console.log('[API /api/nodes] Incoming Capture Request:', {
-      url: body.url,
-      isYouTube: body.isYouTube,
-      transcriptSegmentsLength: body.transcriptSegments?.length
-    });
-    const { url, title, rawContent, formulas = [], workedProblems = [], isYouTube, videoId, channelName, durationSeconds, transcriptSource, transcriptSegments } = body;
+    let { url, title, rawContent, formulas = [], workedProblems = [], isYouTube: clientIsYouTube, videoId: clientVideoId, channelName, durationSeconds, transcriptSource, transcriptSegments } = body;
+
+    // 1. SERVER-SIDE YOUTUBE DETECTION & NORMALIZATION
+    let isYouTube = clientIsYouTube;
+    let videoId = clientVideoId;
+    
+    const ytMatch = url.match(/(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+    if (ytMatch && ytMatch[1]) {
+        isYouTube = true;
+        videoId = ytMatch[1];
+    }
 
     if (!url || !title || (rawContent === undefined && !isYouTube)) {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
@@ -42,21 +48,54 @@ export async function POST(request: Request) {
 
     let finalSegments = transcriptSegments || [];
     let rawSnippet = "";
+    let ytInfo: any = null;
 
-    // 1. EXTRACT / VALIDATE CONTENT (CAPTURE)
-    if (isYouTube) {
-      if (finalSegments.length === 0 && videoId) {
+    if (isYouTube && videoId) {
         try {
-          console.log(`[API /api/nodes] Client provided no transcript. Fetching server-side for videoId: ${videoId}`);
-          const ytRes = await YoutubeTranscript.fetchTranscript(videoId);
-          finalSegments = ytRes.map((item: any) => ({
-            text: item.text,
-            startSeconds: item.offset / 1000,
-            durationSeconds: item.duration / 1000
-          }));
-        } catch (err) {}
-      }
-      rawSnippet = finalSegments.map((s: any) => s.text).join(' ').substring(0, 1500) + '...';
+            console.log(`[API /api/nodes] Using InnerTube for videoId: ${videoId}`);
+            const yt = await Innertube.create();
+            ytInfo = await yt.getInfo(videoId);
+            
+            if (ytInfo && ytInfo.basic_info) {
+                title = ytInfo.basic_info.title || title;
+                channelName = ytInfo.basic_info.channel?.name || channelName;
+                durationSeconds = ytInfo.basic_info.duration || durationSeconds;
+            }
+
+            if (finalSegments.length === 0) {
+                try {
+                    const transcriptData = await ytInfo.getTranscript();
+                    if (transcriptData && transcriptData.transcript && transcriptData.transcript.content) {
+                        const bodyData = transcriptData.transcript.content.body;
+                        if (bodyData && bodyData.initial_segments) {
+                           finalSegments = bodyData.initial_segments.map((seg: any) => ({
+                               text: seg.snippet.text,
+                               startSeconds: parseInt(seg.start_ms) / 1000,
+                               durationSeconds: parseInt(seg.duration_ms) / 1000
+                           }));
+                           transcriptSource = 'manual';
+                        }
+                    }
+                } catch (innerErr) {
+                    console.log("[API] InnerTube transcript fetch failed, falling back to YoutubeTranscript", innerErr);
+                    const ytRes = await YoutubeTranscript.fetchTranscript(videoId);
+                    finalSegments = ytRes.map((item: any) => ({
+                      text: item.text,
+                      startSeconds: item.offset / 1000,
+                      durationSeconds: item.duration / 1000
+                    }));
+                    transcriptSource = 'auto-generated';
+                }
+            }
+        } catch (err) {
+            console.error("[API] InnerTube metadata fetch failed:", err);
+        }
+        
+        if (finalSegments.length > 0) {
+            rawSnippet = finalSegments.map((s: any) => s.text).join(' ').substring(0, 1500) + '...';
+        } else {
+            rawSnippet = (ytInfo?.basic_info?.short_description || "Video transcript unavailable.").substring(0, 1500) + '...';
+        }
     } else {
       rawSnippet = (rawContent || '').substring(0, 1500) + '...';
     }
@@ -75,7 +114,7 @@ export async function POST(request: Request) {
       workedProblems
     };
     
-    if (isYouTube) {
+    if (isYouTube && videoId) {
       pageSubject.videoId = videoId;
       pageSubject.channelName = channelName;
       pageSubject.durationSeconds = durationSeconds;
@@ -84,14 +123,18 @@ export async function POST(request: Request) {
 
     // Save node synchronously so it's instantly available to UI
     const graphData = globalGraph.addScrapedDataToGraph(pageSubject, []);
-    const createdNode = graphData.nodes.find((n: any) => n.canonicalName === title) || pageSubject;
+    const createdNode = graphData.nodes.find((n: any) => n.canonicalName === title || n.videoId === videoId) || pageSubject;
 
-        // RUN AI PROCESSING SYNCHRONOUSLY FOR VERCEL
+    // RUN AI PROCESSING SYNCHRONOUSLY FOR VERCEL
     try {
       console.log(`[AI] Processing started for ${title}`);
       let res: any;
       if (isYouTube) {
-        res = await extractVideoGraphData(finalSegments, formulas, workedProblems);
+        if (finalSegments.length === 0) {
+             res = await extractGraphData((ytInfo?.basic_info?.short_description || title), formulas, workedProblems);
+        } else {
+             res = await extractVideoGraphData(finalSegments, formulas, workedProblems);
+        }
       } else {
         res = await extractGraphData(rawContent || '', formulas, workedProblems);
       }
@@ -101,7 +144,7 @@ export async function POST(request: Request) {
         createdNode.mindMap = res.mindMap;
         if (res.semanticProfile) createdNode.semanticProfile = res.semanticProfile;
         createdNode.processingStatus = 'completed';
-        if (isYouTube) createdNode.keyMoments = res.keyMoments;
+        if (isYouTube && res.keyMoments) createdNode.keyMoments = res.keyMoments;
         
         const extractedEntities = (res.entities || []).map((e: any) => ({
           canonicalName: e.canonicalName, type: e.type, trustScore: e.trustScore, sourceUrl: url, videoId: videoId,
