@@ -519,7 +519,28 @@ export default function Dashboard() {
             </div>
             <span className="rootlink-wordmark heading-style" style={{ display: 'flex', alignItems: 'center', fontSize: '32px', fontWeight: 800, lineHeight: 1, letterSpacing: '-0.02em', margin: 0 }}>Rootlink</span>
           </div>
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <a href="/rootlink-extension.zip" download style={{
+              background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%)',
+              color: 'white',
+              border: '1px solid rgba(168, 85, 247, 0.4)',
+              padding: '6px 12px',
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 700,
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer'
+            }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              Get Chrome Extension
+            </a>
             {graphMode === 'hidden' ? (
                <button onClick={() => setGraphMode('normal')} style={{ background: 'rgba(59, 130, 246, 0.2)', color: 'var(--primary)', border: '1px solid rgba(59,130,246,0.4)', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Show Graph &gt;</button>
             ) : graphMode === 'normal' ? (
