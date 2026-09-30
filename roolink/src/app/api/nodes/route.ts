@@ -122,8 +122,20 @@ export async function POST(request: Request) {
     }
 
     // Save node synchronously so it's instantly available to UI
+    const expectedId = pageSubject.videoId ? `yt-${pageSubject.videoId}` : (pageSubject.sourceUrl ? new URL(pageSubject.sourceUrl).hostname + new URL(pageSubject.sourceUrl).pathname : title).replace(/^www\./, '').replace(/\/$/, '').toLowerCase();
+    
+    // Actually, just let addScrapedDataToGraph run and we will explicitly find it by the deterministic ID logic
     const graphData = globalGraph.addScrapedDataToGraph(pageSubject, []);
-    const createdNode = graphData.nodes.find((n: any) => n.canonicalName === title || n.videoId === videoId) || pageSubject;
+    
+    // Re-import the ID logic to perfectly match
+    const { generateDeterministicId } = require('@/lib/graph');
+    const exactId = generateDeterministicId(pageSubject.canonicalName, pageSubject.sourceUrl, pageSubject.videoId);
+    
+    let createdNode = graphData.nodes.find((n: any) => n.id === exactId);
+    if (!createdNode) {
+        console.error("[API] Could not find created node by ID! Using pageSubject as fallback.");
+        createdNode = { ...pageSubject, id: exactId };
+    }
 
     // RUN AI PROCESSING SYNCHRONOUSLY FOR VERCEL
     try {
@@ -146,8 +158,7 @@ export async function POST(request: Request) {
         createdNode.processingStatus = 'completed';
         if (isYouTube && res.keyMoments) createdNode.keyMoments = res.keyMoments;
         
-        globalGraph.addScrapedDataToGraph(createdNode, []);
-        // globalGraph.recalculateAutomaticLinks(); // DISABLING AUTOMATIC LINKAGE SYSTEM AS REQUESTED
+        globalGraph.updateNode(createdNode.id, createdNode);
       } else {
         createdNode.processingStatus = 'failed';
         globalGraph.updateNode(createdNode.id, createdNode);
