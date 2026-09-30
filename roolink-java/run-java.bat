@@ -1,0 +1,3 @@
+@echo off
+echo Building and running Roolink Java Spring Boot Backend...
+mvn spring-boot:run

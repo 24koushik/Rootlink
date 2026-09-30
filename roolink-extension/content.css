@@ -1,0 +1,136 @@
+@keyframes roolink-ambient-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,0.1), 0 8px 32px rgba(91, 79, 233, 0.2); transform: translate(calc(-50% + var(--offset-x, 0px)), -50%) scale(1); }
+  50% { box-shadow: 0 0 0 1px rgba(255,255,255,0.2), 0 12px 40px rgba(217, 70, 239, 0.4); transform: translate(calc(-50% + var(--offset-x, 0px)), -50%) scale(1.02); }
+}
+
+@keyframes roolink-success-flash {
+  0% { box-shadow: 0 0 0 1px rgba(255,255,255,0.2), 0 0 0 rgba(52, 199, 123, 0); }
+  50% { box-shadow: 0 0 0 2px rgba(255,255,255,0.6), 0 8px 48px rgba(52, 199, 123, 0.8); background: linear-gradient(135deg, #22A06B 0%, #34C77B 100%); }
+  100% { box-shadow: 0 0 0 1px rgba(255,255,255,0.2), 0 8px 32px rgba(52, 199, 123, 0.2); }
+}
+
+.roolink-orb {
+  width: 48px;
+  height: 48px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #5B4FE9 0%, #D946EF 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: none;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+  position: relative;
+  z-index: 10;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  /* Bouncy elastic expansion */
+  transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.2s ease, box-shadow 0.3s ease, background 0.3s ease, filter 0.1s ease;
+  will-change: width, transform;
+}
+
+.roolink-orb:active:not(.roolink-dragging) {
+  filter: brightness(1.15);
+}
+
+.roolink-orb.roolink-idle {
+  animation: roolink-ambient-pulse 3s ease-in-out infinite;
+}
+
+.roolink-orb:active:not(.roolink-expanded) {
+  cursor: grabbing;
+}
+
+.roolink-orb.roolink-dragging {
+  cursor: grabbing;
+  transform: translate(calc(-50% + var(--offset-x, 0px)), -50%) scale(1.1);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.4), 0 12px 48px rgba(217, 70, 239, 0.6);
+  transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.1s ease, transform 0.1s ease;
+  animation: none;
+}
+
+.roolink-orb.roolink-expanded {
+  width: 205px; /* Increased width to prevent text and X overlap */
+  cursor: pointer;
+  animation: none; /* Stop idle pulse */
+  transform: translate(calc(-50% + var(--offset-x, 0px)), -50%) scale(1);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.2), 0 12px 40px rgba(91, 79, 233, 0.4);
+}
+
+.roolink-orb.roolink-success {
+  animation: roolink-success-flash 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Internal elements */
+.roolink-icon {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+  pointer-events: none;
+}
+
+.roolink-text {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  /* Slide in slightly later */
+  transform: translateX(10px);
+  transition: opacity 0.2s ease 0s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) 0s;
+}
+
+.roolink-expanded .roolink-icon {
+  opacity: 0;
+  transform: scale(0.5) rotate(-45deg);
+  pointer-events: none;
+}
+
+.roolink-expanded .roolink-text {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: none;
+  /* Stagger the entrance so text fades in as the pill finishes expanding */
+  transition: opacity 0.3s ease 0.1s, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s;
+}
+
+.roolink-close {
+  position: absolute;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.8);
+  transition: all 0.2s ease;
+}
+
+.roolink-close:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.roolink-expanded .roolink-close {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+  transition: opacity 0.3s ease 0.2s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s;
+}

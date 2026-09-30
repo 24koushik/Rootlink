@@ -1,0 +1,160 @@
+@import "katex/dist/katex.min.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Premium SaaS Dark Palette */
+  --bg-deep: #08090D;
+  --surface: #101218;
+  --surface-elevated: #151821;
+  --card: #11141B;
+  
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.16);
+  
+  /* Accents */
+  --primary: #35D6C7;
+  --secondary: #6C7CFF;
+  --highlight: #F2B84B;
+  --danger: #ef4444;
+  
+  /* Trust Colors */
+  --trust-high: #35D6C7;
+  --trust-med: #F2B84B;
+  --trust-low: #ef4444;
+  --trust-unverified: #6F7685;
+  
+  /* Text */
+  --text-heading: #F5F7FA;
+  --text-body: #A7ADBA;
+  --text-disabled: #6F7685;
+  
+  /* Spacing System */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Corner Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%; width: 100%; 
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--bg-deep);
+  color: var(--text-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle background gradient instead of noisy nebula */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: -2;
+  background: radial-gradient(circle at 20% 0%, rgba(53, 214, 199, 0.035), transparent 35%), var(--bg-deep);
+  pointer-events: none;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { 
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 100px; 
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+/* Typography Utilities */
+.heading-style {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+/* Standard Premium Card Shell */
+.card-shell {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-lg);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden; /* CRITICAL: Prevents glow escape */
+  transition: all 0.2s ease-out;
+}
+
+.card-shell:hover {
+  border-color: rgba(53, 214, 199, 0.35);
+  background: rgba(53, 214, 199, 0.04);
+}
+
+/* Replaces old liquid-glass */
+.liquid-glass {
+  background: var(--card);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-lg);
+  position: relative;
+  isolation: isolate;
+  /* overflow: hidden is handled per component if scrolling is needed */
+}
+
+/* Tooltip */
+.node-tooltip {
+  position: absolute; 
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md); 
+  padding: 16px; 
+  box-shadow: 0 16px 32px rgba(0,0,0,0.4);
+  pointer-events: none; 
+  z-index: 100;
+  max-width: 280px;
+}
+
+/* Graph Specifics */
+.graph-dimmed {
+  opacity: 0.2 !important;
+  transition: opacity 0.3s ease !important;
+}
+
+.graph-focus {
+  opacity: 1 !important;
+  transition: opacity 0.3s ease !important;
+}
+
+/* KaTeX Overrides */
+.katex-display { overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; }
+.katex { max-width: 100%; color: var(--text-heading); }
+
+
+/* Restored Logo Animations */
+@keyframes orbit-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes orbit-spin-reverse {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.4));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(168, 85, 247, 0.8));
+    transform: scale(1.05);
+  }
+}

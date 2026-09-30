@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Rootlink Capture",
+  "version": "1.0",
+  "description": "Capture information provenance from any webpage directly to Rootlink.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:3000/*",
+    "*://*.youtube.com/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "css": ["content.css"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Rootlink Capture is active on this page"
+  }
+}
