@@ -4,6 +4,7 @@ import { extractGraphData, extractVideoGraphData, detectSemanticRelationships } 
 import { YoutubeTranscript } from 'youtube-transcript';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function GET() {
   const graphData = globalGraph.getGraphData();

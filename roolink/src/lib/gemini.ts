@@ -119,7 +119,7 @@ CRITICAL INSTRUCTIONS:
 - Keep mind map nodes concise. Put detailed text in the summary.sections.`;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15-second fast timeout
+  const timeoutId = setTimeout(() => controller.abort(), 45000); // 15-second fast timeout
 
   const t0 = performance.now();
   try {
@@ -171,7 +171,7 @@ Failed Map: ${JSON.stringify(failedMap)}
 Source: ${content.substring(0, 5000)}`;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const timeoutId = setTimeout(() => controller.abort(), 45000);
 
   try {
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {

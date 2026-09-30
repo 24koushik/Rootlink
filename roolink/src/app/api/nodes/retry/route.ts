@@ -3,6 +3,7 @@ import { globalGraph } from '@/lib/graph';
 import { extractGraphData, extractVideoGraphData } from '@/lib/gemini';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
