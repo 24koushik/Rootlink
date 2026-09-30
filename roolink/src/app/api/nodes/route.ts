@@ -131,7 +131,7 @@ export async function POST(request: Request) {
     const { generateDeterministicId } = require('@/lib/graph');
     const exactId = generateDeterministicId(pageSubject.canonicalName, pageSubject.sourceUrl, pageSubject.videoId);
     
-    let createdNode = graphData.nodes.find((n: any) => n.id === exactId);
+    let createdNode: any = graphData.nodes.find((n: any) => n.id === exactId);
     if (!createdNode) {
         console.error("[API] Could not find created node by ID! Using pageSubject as fallback.");
         createdNode = { ...pageSubject, id: exactId };
