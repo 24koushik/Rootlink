@@ -85,55 +85,46 @@ export async function POST(request: Request) {
     const graphData = globalGraph.addScrapedDataToGraph(pageSubject, []);
     const createdNode = graphData.nodes.find((n: any) => n.canonicalName === title) || pageSubject;
 
-    // START BACKGROUND AI PROCESSING (Do not await!)
-    (async () => {
-       try {
-         console.log(`[AI] Background processing started for ${title}`);
-         let res: any;
-         if (isYouTube) {
-           res = await extractVideoGraphData(finalSegments, formulas, workedProblems);
-         } else {
-           res = await extractGraphData(rawContent, formulas, workedProblems);
-         }
+        // RUN AI PROCESSING SYNCHRONOUSLY FOR VERCEL
+    try {
+      console.log(`[AI] Processing started for ${title}`);
+      let res: any;
+      if (isYouTube) {
+        res = await extractVideoGraphData(finalSegments, formulas, workedProblems);
+      } else {
+        res = await extractGraphData(rawContent || '', formulas, workedProblems);
+      }
 
-         if (res && res.structuredSummary) {
-           createdNode.structuredSummary = res.structuredSummary;
-           createdNode.mindMap = res.mindMap;
-           if (res.semanticProfile) createdNode.semanticProfile = res.semanticProfile;
-           createdNode.processingStatus = 'completed';
-           if (isYouTube) createdNode.keyMoments = res.keyMoments;
-           
-           // Process entities
-           const extractedEntities = (res.entities || []).map((e: any) => ({
-             canonicalName: e.canonicalName, type: e.type, trustScore: e.trustScore, sourceUrl: url, videoId: isYouTube ? videoId : undefined,
-             sourceReferences: [{ url, contextSnippet: 'Extracted mention', timestamp: Date.now() }]
-           }));
-           globalGraph.addScrapedDataToGraph(createdNode, extractedEntities);
-           globalGraph.recalculateAutomaticLinks();
-           console.log(`[AI] Background processing completed for ${title}`);
-         } else {
-           console.log(`[AI] Background processing returned no summary for ${title}`);
-           createdNode.processingStatus = 'failed';
-           globalGraph.updateNode(createdNode.id, createdNode);
-         }
-       } catch (err) {
-         console.error(`[AI] Background processing failed for ${title}:`, err);
-         createdNode.processingStatus = 'failed';
-         globalGraph.updateNode(createdNode.id, createdNode);
-       }
-    })();
+      if (res && res.structuredSummary) {
+        createdNode.structuredSummary = res.structuredSummary;
+        createdNode.mindMap = res.mindMap;
+        if (res.semanticProfile) createdNode.semanticProfile = res.semanticProfile;
+        createdNode.processingStatus = 'completed';
+        if (isYouTube) createdNode.keyMoments = res.keyMoments;
+        
+        const extractedEntities = (res.entities || []).map((e: any) => ({
+          canonicalName: e.canonicalName, type: e.type, trustScore: e.trustScore, sourceUrl: url, videoId: videoId,
+          sourceReferences: [{ url, contextSnippet: 'Extracted mention', timestamp: Date.now() }]
+        }));
+        globalGraph.addScrapedDataToGraph(createdNode, extractedEntities);
+        globalGraph.recalculateAutomaticLinks();
+      } else {
+        createdNode.processingStatus = 'failed';
+        globalGraph.updateNode(createdNode.id, createdNode);
+      }
+    } catch (err) {
+      console.error('[AI] Processing failed:', err);
+      createdNode.processingStatus = 'failed';
+      globalGraph.updateNode(createdNode.id, createdNode);
+    }
 
-    // 2. RETURN SUCCESS IMMEDIATELY
-    console.log(`[Capture] Node created successfully. Returning success.`);
     return NextResponse.json({ 
-       success: true, 
-       captureStatus: 'captured', 
-       nodeId: createdNode.id,
-       data: { source: createdNode } 
+      success: true,
+      captureStatus: 'captured', 
+      nodeId: createdNode.id 
     });
-
   } catch (error: any) {
-    console.error("[Capture] API Error:", error);
-    return NextResponse.json({ success: false, error: 'SERVER_ERROR' }, { status: 500 });
+    console.error("API /nodes POST Error:", error);
+    return NextResponse.json({ success: false, error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
