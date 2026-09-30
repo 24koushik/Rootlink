@@ -36,12 +36,8 @@ export async function POST(request: Request) {
         node.processingStatus = 'completed';
         if (isYouTube) node.keyMoments = res.keyMoments;
         
-        const extractedEntities = (res.entities || []).map((e: any) => ({
-          canonicalName: e.canonicalName, type: e.type, trustScore: e.trustScore, sourceUrl: node.sourceUrl, videoId: node.videoId,
-          sourceReferences: [{ url: node.sourceUrl || '', contextSnippet: 'Extracted mention', timestamp: Date.now() }]
-        }));
-        globalGraph.addScrapedDataToGraph(node, extractedEntities);
-        globalGraph.recalculateAutomaticLinks();
+        globalGraph.addScrapedDataToGraph(node, []);
+        // globalGraph.recalculateAutomaticLinks(); // DISABLING AUTOMATIC LINKAGE SYSTEM
       } else {
         node.processingStatus = 'failed';
         globalGraph.updateNode(node.id, node);

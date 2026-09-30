@@ -146,12 +146,8 @@ export async function POST(request: Request) {
         createdNode.processingStatus = 'completed';
         if (isYouTube && res.keyMoments) createdNode.keyMoments = res.keyMoments;
         
-        const extractedEntities = (res.entities || []).map((e: any) => ({
-          canonicalName: e.canonicalName, type: e.type, trustScore: e.trustScore, sourceUrl: url, videoId: videoId,
-          sourceReferences: [{ url, contextSnippet: 'Extracted mention', timestamp: Date.now() }]
-        }));
-        globalGraph.addScrapedDataToGraph(createdNode, extractedEntities);
-        globalGraph.recalculateAutomaticLinks();
+        globalGraph.addScrapedDataToGraph(createdNode, []);
+        // globalGraph.recalculateAutomaticLinks(); // DISABLING AUTOMATIC LINKAGE SYSTEM AS REQUESTED
       } else {
         createdNode.processingStatus = 'failed';
         globalGraph.updateNode(createdNode.id, createdNode);
