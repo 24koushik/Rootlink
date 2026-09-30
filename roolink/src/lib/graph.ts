@@ -1,4 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import { sql } from '@vercel/postgres';
+
+if (!process.env.POSTGRES_URL) {
+  if (process.env.DATABASE_URL) process.env.POSTGRES_URL = process.env.DATABASE_URL;
+  else if (process.env.STORAGE_URL) process.env.POSTGRES_URL = process.env.STORAGE_URL;
+}
+
+import path from 'path';
 
 export interface SourceReference {
   url: string;
@@ -239,6 +248,91 @@ export function generateEdgesFromPage(pageSubjectNodeId: string, extractedEntiti
 // ------------------------------------------------------------------
 
 class ProvenanceGraph {
+
+// PERSISTENCE ENGINE (Vercel Postgres + Local Fallback)
+  private async saveState() {
+    try {
+      if (typeof window !== 'undefined') return;
+      
+      const data = {
+        nodes: this.nodes,
+        edges: this.edges,
+        suppressedLinks: Array.from(this.suppressedLinks)
+      };
+
+      // 1. Always save locally as a backup
+      const dbPath = path.join(process.cwd(), 'database.json');
+      fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf-8');
+
+      // 2. If Vercel Postgres is connected, save to cloud
+      if (process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.STORAGE_URL) {
+        // Ensure table exists (fire and forget)
+        await sql`
+          CREATE TABLE IF NOT EXISTS graph_state (
+            id INTEGER PRIMARY KEY,
+            state JSONB NOT NULL
+          )
+        `;
+        
+        // Upsert state
+        await sql`
+          INSERT INTO graph_state (id, state)
+          VALUES (1, ${JSON.stringify(data)}::jsonb)
+          ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state
+        `;
+      }
+    } catch (e) {
+      console.error('Failed to save graph state:', e);
+    }
+  }
+
+  private async loadState() {
+    try {
+      if (typeof window !== 'undefined') return;
+      
+      let loadedData: any = null;
+
+      // 1. Try Vercel Postgres first
+      if (process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.STORAGE_URL) {
+        try {
+          await sql`
+            CREATE TABLE IF NOT EXISTS graph_state (
+              id INTEGER PRIMARY KEY,
+              state JSONB NOT NULL
+            )
+          `;
+          const result = await sql`SELECT state FROM graph_state WHERE id = 1`;
+          if (result.rows.length > 0) {
+            loadedData = result.rows[0].state;
+            console.log("[KNOWLEDGE GRAPH] Loaded from Vercel Postgres!");
+          }
+        } catch (dbError) {
+          console.error("Vercel Postgres load failed, falling back to local:", dbError);
+        }
+      }
+
+      // 2. Fallback to Local JSON
+      if (!loadedData) {
+        const dbPath = path.join(process.cwd(), 'database.json');
+        if (fs.existsSync(dbPath)) {
+          const raw = fs.readFileSync(dbPath, 'utf-8');
+          loadedData = JSON.parse(raw);
+          console.log("[KNOWLEDGE GRAPH] Loaded from local database.json!");
+        }
+      }
+
+      if (loadedData) {
+        this.nodes = loadedData.nodes || [];
+        this.edges = loadedData.edges || [];
+        if (loadedData.suppressedLinks) {
+          this.suppressedLinks = new Set(loadedData.suppressedLinks);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load graph state:', e);
+    }
+  }
+
   public nodes: TrustNode[] = [];
   public edges: TrustEdge[] = [];
   public suppressedLinks = new Set<string>(); // Stores pair keys like "nodeA:nodeB"
@@ -252,6 +346,7 @@ class ProvenanceGraph {
     const allEntities = [pageSubject, ...extractedEntities];
     this.nodes = processIncomingEntities(allEntities, this.nodes);
     this.edges = generateEdgesFromPage(pageSubjectId, extractedEntities, this.edges);
+    this.saveState();
     return { nodes: this.nodes, edges: this.edges };
   }
 
@@ -259,6 +354,7 @@ class ProvenanceGraph {
     const idx = this.nodes.findIndex(n => n.id === id);
     if (idx >= 0) {
       this.nodes[idx] = { ...this.nodes[idx], ...updatedFields };
+        this.saveState();
     }
   }
 
@@ -282,6 +378,7 @@ class ProvenanceGraph {
         origin: 'manual',
         createdAt: Date.now()
       });
+   this.saveState();
     }
   }
 
@@ -301,6 +398,7 @@ class ProvenanceGraph {
       !(e.sourceId === sourceId && e.targetId === targetId) &&
       !(e.sourceId === targetId && e.targetId === sourceId)
     );
+    this.saveState();
   }
 
   recalculateAutomaticLinks() {
@@ -405,6 +503,7 @@ class ProvenanceGraph {
   deleteNode(nodeId: string) {
     this.nodes = this.nodes.filter(n => n.id !== nodeId);
     this.edges = this.edges.filter(e => e.sourceId !== nodeId && e.targetId !== nodeId);
+    this.saveState();
   }
 
   getChainSummaries(nodeId: string): string[] {
