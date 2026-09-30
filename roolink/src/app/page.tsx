@@ -539,7 +539,7 @@ export default function Dashboard() {
                 <polyline points="7 10 12 15 17 10"></polyline>
                 <line x1="12" y1="15" x2="12" y2="3"></line>
               </svg>
-              Get Chrome Extension
+              Get Extension
             </a>
             {graphMode === 'hidden' ? (
                <button onClick={() => setGraphMode('normal')} style={{ background: 'rgba(59, 130, 246, 0.2)', color: 'var(--primary)', border: '1px solid rgba(59,130,246,0.4)', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Show Graph &gt;</button>
