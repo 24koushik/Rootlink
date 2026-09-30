@@ -3,7 +3,7 @@
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'CREATE_NODE') {
     // Send data to Next.js API
-    fetch('http://localhost:3000/api/nodes', {
+    fetch('https://roolink.vercel.app/api/nodes', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

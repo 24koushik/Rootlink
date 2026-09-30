@@ -577,6 +577,7 @@ function showSummaryPanel(summaryText, x, y) {
 
 const EXCLUDED_HOSTS = [
   'localhost:3000',
+  'roolink.vercel.app',
   '127.0.0.1:3000',
   'localhost',
 ];
