@@ -77,11 +77,11 @@ ${content}${extraContext}
 Respond ONLY with pure JSON matching this EXACT schema:
 {
   "summary": {
-    "overview": "Detailed overview paragraph...",
+    "overview": "A very long, highly detailed, multi-paragraph comprehensive summary of the entire content...",
     "sections": [
       {
         "title": "Main Concept/Heading",
-        "explanation": "Explanation of this section",
+        "explanation": "Deep, comprehensive, multi-sentence technical explanation of this specific section",
         "keyPoints": ["Important detail 1", "Important detail 2"]
       }
     ],
