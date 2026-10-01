@@ -1147,7 +1147,7 @@ export default function Dashboard() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(10px)'
         }}>
-          <div className="card-shell" style={{ width: '400px', padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="card-shell" style={{ width: '400px', padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '16px', overflow: 'visible' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-heading)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Establish Knowledge Link</h3>
               <button onClick={() => setIsLinkingModalOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-disabled)', cursor: 'pointer' }}><X size={18} /></button>
