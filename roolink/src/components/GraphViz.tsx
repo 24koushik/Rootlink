@@ -56,7 +56,7 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
   }, [onNodeSelect, setTooltip]);
 
   const { links, incomingCounts, outgoingCounts } = useMemo(() => {
-    const edgeList = rawEdges.map(e => ({ source: e.sourceId, target: e.targetId }));
+    const edgeList = rawEdges.map(e => ({ ...e, source: e.sourceId, target: e.targetId }));
     const inCount = new Map<string, number>();
     const outCount = new Map<string, number>();
     
@@ -245,10 +245,18 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
     });
 
     const validNodeIds = new Set(d3Nodes.map(n => n.id));
-    const validLinks = links.filter(l => validNodeIds.has(l.source) && validNodeIds.has(l.target));
+    const validLinks = links.filter(l => {
+      const sId = typeof l.source === 'string' ? l.source : (l.source as any).id;
+      const tId = typeof l.target === 'string' ? l.target : (l.target as any).id;
+      return validNodeIds.has(sId) && validNodeIds.has(tId);
+    });
 
     const currentNodeIds = new Set(d3Nodes.map(n => n.id));
-    const currentLinkIds = new Set(validLinks.map(l => `${l.source}-${l.target}`));
+    const currentLinkIds = new Set(validLinks.map(l => {
+      const sId = typeof l.source === 'string' ? l.source : (l.source as any).id;
+      const tId = typeof l.target === 'string' ? l.target : (l.target as any).id;
+      return `${sId}-${tId}`;
+    }));
 
     // Check Topology changes
     let topologyChanged = false;
