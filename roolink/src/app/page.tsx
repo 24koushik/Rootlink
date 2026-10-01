@@ -912,11 +912,7 @@ export default function Dashboard() {
                 if (finalMindMap) {
                   return (
                     <div style={{ flex: 1, minHeight: '650px', width: '100%', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-glass)', display: 'flex', flexDirection: 'column' }}>
-                       <div style={{ padding: '12px', background: 'rgba(53, 214, 199, 0.05)', borderBottom: '1px solid rgba(53, 214, 199, 0.1)', display: 'flex', justifyContent: 'flex-end' }}>
-                          <button onClick={generateMindMap} disabled={isGeneratingMindMap} style={{ background: 'transparent', border: '1px solid rgba(53,214,199,0.3)', color: 'var(--primary)', padding: '6px 12px', borderRadius: '4px', cursor: isGeneratingMindMap ? 'not-allowed' : 'pointer', fontSize: '12px' }}>
-                            {isGeneratingMindMap ? 'Regenerating...' : 'Regenerate AI Mind Map'}
-                          </button>
-                       </div>
+                       
                        <MindMapViz mindMap={finalMindMap} />
                     </div>
                   );
