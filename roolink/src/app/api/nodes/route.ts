@@ -172,7 +172,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ 
       success: true,
       captureStatus: 'captured', 
-      nodeId: createdNode.id 
+      nodeId: createdNode.id,
+      source: {
+        aiSummary: createdNode.structuredSummary?.overview || createdNode.summary || "Successfully captured and added to your Knowledge Graph."
+      }
     });
   } catch (error: any) {
     console.error("API /nodes POST Error:", error);
