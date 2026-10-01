@@ -309,6 +309,37 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const currentHash = nodes.map(n => n.id + (n.processingStatus || '') + (n.canonicalName) + (n.semanticProfile?.concepts?.length || 0)).join('|');
+    if (nodes.length > 0 && currentHash !== prevGraphHash.current) {
+      setLoadingGlobalSummary(true);
+      const timeout = setTimeout(() => {
+        prevGraphHash.current = currentHash;
+        fetch('/api/oversummary', { method: 'POST' })
+          .then(res => res.json())
+          .then(data => {
+            if (data && !data.error) setGlobalSummary(data);
+            else setGlobalSummary({ overview: "Failed to generate global summary.", majorTopics: [], commonConcepts: [], sourceCount: nodes.length });
+          })
+          .catch(e => {
+            console.error("Global summary poll error", e);
+            setGlobalSummary({ overview: "Error connecting to global summary service.", majorTopics: [], commonConcepts: [], sourceCount: nodes.length });
+          })
+          .finally(() => setLoadingGlobalSummary(false));
+      }, 1500);
+      return () => clearTimeout(timeout);
+    } else if (nodes.length === 0 && currentHash !== prevGraphHash.current) {
+      prevGraphHash.current = currentHash;
+      setGlobalSummary({
+        overview: "No knowledge captured yet. Capture webpages or videos to start building your knowledge base.",
+        majorTopics: [],
+        commonConcepts: [],
+        sourceCount: 0
+      });
+    }
+  }, [nodes]);
+
+
   const handleEdgeSelect = (edge: TrustEdge) => {
     setSelectedEdge(edge);
     setSelectedNode(null);
