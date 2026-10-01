@@ -159,14 +159,17 @@ export async function POST(request: Request) {
         if (isYouTube && res.keyMoments) createdNode.keyMoments = res.keyMoments;
         
         globalGraph.updateNode(createdNode.id, createdNode);
+        globalGraph.recalculateAutomaticLinks();
       } else {
         createdNode.processingStatus = 'failed';
         globalGraph.updateNode(createdNode.id, createdNode);
+        globalGraph.recalculateAutomaticLinks();
       }
     } catch (err) {
       console.error('[AI] Processing failed:', err);
       createdNode.processingStatus = 'failed';
       globalGraph.updateNode(createdNode.id, createdNode);
+        globalGraph.recalculateAutomaticLinks();
     }
 
     return NextResponse.json({ 

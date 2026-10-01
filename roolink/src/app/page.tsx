@@ -215,8 +215,9 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'summary' | 'mindmap' | 'sources'>('summary');
   const [isGeneratingMindMap, setIsGeneratingMindMap] = useState(false);
   const [mindMapError, setMindMapError] = useState<string | null>(null);
-  const [overSummary, setOverSummary] = useState<string | null>(null);
-  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [globalSummary, setGlobalSummary] = useState<any>(null);
+  const [loadingGlobalSummary, setLoadingGlobalSummary] = useState(false);
+  const prevGraphHash = useRef('');
   const [linkSource, setLinkSource] = useState('');
   const [linkTarget, setLinkTarget] = useState('');
   const [toast, setToast] = useState<string | null>(null);
@@ -317,7 +318,7 @@ export default function Dashboard() {
   const handleNodeSelect = async (node: TrustNode) => {
     setSelectedNode(node);
     setSelectedEdge(null);
-    setOverSummary(null);
+    
     setActiveTab('summary');
     const outgoingEdges = edges.filter(e => e.sourceId === node.id);
     if (outgoingEdges.length > 0) {
@@ -389,7 +390,7 @@ export default function Dashboard() {
         
         if (selectedNode?.id === nodeToDelete) {
           setSelectedNode(null);
-          setOverSummary(null);
+          
         }
         showToast('✓ Node deleted successfully');
       } else {
@@ -550,8 +551,60 @@ export default function Dashboard() {
         </div>
 
         {/* Content Reader / Node Detail */}
-        <div className="flex-1 overflow-y-auto" style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column' }}>
-          {selectedNode ? (
+        <div className="flex-1 overflow-y-auto" style={{ display: 'flex', flexDirection: 'column' }}>
+
+          {/* OVERALL KNOWLEDGE (GLOBAL SUMMARY) */}
+          <div style={{ padding: 'var(--space-4)', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
+            <h3 style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-disabled)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              Overall Knowledge
+              {loadingGlobalSummary && <span style={{ color: 'var(--primary)', animation: 'pulse-glow 1.5s infinite' }}>Updating...</span>}
+            </h3>
+            
+            {!globalSummary ? (
+              <div style={{ color: 'var(--text-disabled)', fontSize: '14px', fontStyle: 'italic' }}>
+                {nodes.length > 0 ? "Analyzing knowledge base..." : "No knowledge captured yet. Capture webpages or videos to start building your knowledge base."}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ fontSize: '14px', lineHeight: 1.6, color: 'var(--text-body)' }}>
+                  {globalSummary.overview}
+                </div>
+                
+                {globalSummary.majorTopics && globalSummary.majorTopics.length > 0 && (
+                  <div>
+                    <h4 style={{ fontSize: '12px', fontWeight: 700, color: 'white', marginBottom: '8px' }}>Major Topics</h4>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {globalSummary.majorTopics.map((t: any, i: number) => (
+                        <span key={i} style={{ padding: '4px 8px', background: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.3)', borderRadius: '6px', fontSize: '12px', color: 'var(--accent)' }}>
+                          {t.topic}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {globalSummary.commonConcepts && globalSummary.commonConcepts.length > 0 && (
+                  <div>
+                    <h4 style={{ fontSize: '12px', fontWeight: 700, color: 'white', marginBottom: '8px' }}>Common Concepts</h4>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {globalSummary.commonConcepts.map((c: string, i: number) => (
+                        <span key={i} style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+                          {c}{i < globalSummary.commonConcepts.length - 1 ? ' � ' : ''}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ fontSize: '12px', color: 'var(--text-disabled)', fontWeight: 600 }}>
+                  Sources: {globalSummary.sourceCount || nodes.length}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", flex: 1 }}>
+            {selectedNode ? (
             <div className="animate-fade-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
               
               <div>
@@ -965,33 +1018,6 @@ export default function Dashboard() {
                 })()}
               </div>
 
-              {/* Chain Over-Summary */}
-              {edges.filter(e => e.sourceId === selectedNode.id).length > 0 && (
-                <div className="card-shell" style={{ marginTop: 24, padding: '20px 24px', background: 'rgba(91, 79, 233, 0.08)', borderColor: 'rgba(139, 92, 246, 0.2)' }}>
-                  <h3 style={{
-                    fontSize: 11, fontWeight: 700, color: 'var(--primary)',
-                    textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12,
-                    display: 'flex', alignItems: 'center', gap: 6,
-                  }}>
-                    <Network size={14} /> Chain Over-Summary
-                  </h3>
-                  {loadingSummary ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--primary)', fontSize: 13, padding: '8px 0', fontWeight: 500 }}>
-                      <RefreshCw size={14} className="animate-spin" /> Synthesizing network data…
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 14, color: 'var(--text-heading)', lineHeight: 1.7 }}>
-                      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                        {overSummary || 'No over-summary available.'}
-                      </ReactMarkdown>
-                    </div>
-                  )}
-  
-              
-
-              </div>
-              )}
-
               {/* Delete Node Button */}
               <div style={{ marginTop: 32, padding: '16px 0', borderTop: '1px solid var(--border-glass)' }}>
                 <button
@@ -1011,20 +1037,11 @@ export default function Dashboard() {
               </div>
             </div>
           ) : (
-            <div style={{
-              flex: 1, display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center', textAlign: 'center',
-              gap: '24px', color: 'var(--text-disabled)',
-            }}>
-              <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '0.1em' }}>ROOTLINK</div>
-              <div style={{ fontSize: '16px', maxWidth: '300px', lineHeight: 1.6 }}>
-                Capture knowledge from the web.
-                <br/><br/>
-                Click the Capture Orb on any webpage or YouTube video to begin.
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-disabled)', fontSize: '14px', fontStyle: 'italic' }}>
+                Select a source from the graph to view details.
               </div>
-              <button style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', color: 'var(--primary)', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>How it works</button>
+            )}
             </div>
-          )}
         </div>
 
         </aside>

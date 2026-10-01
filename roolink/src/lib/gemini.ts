@@ -326,3 +326,60 @@ export async function generateOverSummary(texts: string[]): Promise<string> {
     return "Error generating overview.";
   }
 }
+
+export async function generateGlobalSummary(payload: any): Promise<any> {
+    const prompt = `Analyze the following structured knowledge base and provide a global knowledge summary.
+DO NOT summarize individual items one by one. Synthesize them into an overall understanding of the topics and themes.
+
+INPUT:
+${JSON.stringify(payload, null, 2)}
+
+OUTPUT FORMAT (Valid JSON only):
+{
+  "overview": "A 2-3 sentence paragraph explaining the entire breadth of the knowledge base, pointing out the major themes and overlaps.",
+  "majorTopics": [
+    {
+      "topic": "Topic Name",
+      "description": "Short explanation of how this appears across sources.",
+      "sourceCount": 2
+    }
+  ],
+  "commonConcepts": ["Concept1", "Concept2"]
+}`;
+    
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      return {
+        overview: "Overview generated locally (No API key).",
+        majorTopics: [],
+        commonConcepts: []
+      };
+    }
+    
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          models: ["google/gemini-2.5-flash", "meta-llama/llama-3.1-8b-instruct"],
+          provider: { sort: "throughput", allow_fallbacks: true },
+          response_format: { type: "json_object" },
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+      const data = await res.json();
+      let text = data?.choices?.[0]?.message?.content || "{}";
+      text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      return JSON.parse(text);
+    } catch (e) {
+      console.error("Global summary error", e);
+      return {
+        overview: "Knowledge overview update failed. Showing previous version.",
+        majorTopics: [],
+        commonConcepts: []
+      };
+    }
+}

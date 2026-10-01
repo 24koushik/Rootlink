@@ -37,7 +37,7 @@ export async function POST(request: Request) {
         if (isYouTube) node.keyMoments = res.keyMoments;
         
         globalGraph.addScrapedDataToGraph(node, []);
-        // globalGraph.recalculateAutomaticLinks(); // DISABLING AUTOMATIC LINKAGE SYSTEM
+        globalGraph.recalculateAutomaticLinks();
       } else {
         node.processingStatus = 'failed';
         globalGraph.updateNode(node.id, node);

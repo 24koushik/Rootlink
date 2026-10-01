@@ -248,9 +248,11 @@ export function generateEdgesFromPage(pageSubjectNodeId: string, extractedEntiti
 // ------------------------------------------------------------------
 
 class ProvenanceGraph {
+  public globalSummary: any = null;
+  public globalSummaryHash: string = "";
 
 // PERSISTENCE ENGINE (Vercel Postgres + Local Fallback)
-  private async saveState() {
+  public async saveState() {
     try {
       if (typeof window !== 'undefined') return;
       
@@ -401,17 +403,49 @@ class ProvenanceGraph {
     this.saveState();
   }
 
+  
+  deleteNode(id: string) {
+    this.nodes = this.nodes.filter(n => n.id !== id);
+    this.edges = this.edges.filter(e => e.sourceId !== id && e.targetId !== id);
+    this.saveState();
+  }
+
   recalculateAutomaticLinks() {
     // 1. Clear all existing automatic links except co_mentioned which are from extraction
     this.edges = this.edges.filter(e => e.origin === 'manual' || e.relationshipType === 'co_mentioned');
 
-    const JACCARD_THRESHOLD = 0.15; // Tuneable
+    const JACCARD_THRESHOLD = 0.08; // Adjusted to be practical based on normalized multi-signal overlap
     const MAX_LINKS = 8;
 
-    // Helper to extract tokens
-    const tokenize = (arr: string[] = []) => new Set(
-      arr.map(s => s.toLowerCase().replace(/[^a-z0-9]/g, ' ').trim()).filter(s => s.length > 0)
-    );
+    const tokenizeConcepts = (arr: string[] = [], fallbackText: string = "") => {
+      const set = new Set<string>();
+      
+      const normalize = (text: string) => {
+        let t = text.toLowerCase();
+        t = t.replace(/object-oriented programming/g, 'oop').replace(/object oriented programming/g, 'oop');
+        return t.replace(/[^a-z0-9]/g, ' ').trim();
+      };
+      
+      for(let s of arr) {
+        s = normalize(s);
+        if (s.length > 0) set.add(s);
+        // Add sub-words if multi-word concept
+        const parts = s.split(/\s+/);
+        if (parts.length > 1) {
+          for(const p of parts) if (p.length > 3) set.add(p);
+        }
+      }
+      
+      if (fallbackText) {
+        const text = normalize(fallbackText);
+        const tokens = text.split(/\s+/).filter(s => s.length > 3);
+        const stopwords = new Set(['this', 'that', 'with', 'from', 'what', 'your', 'about', 'there', 'their', 'which', 'would', 'could', 'have', 'been']);
+        for(const t of tokens) {
+          if (!stopwords.has(t)) set.add(t);
+        }
+      }
+      return set;
+    };
 
     const calcJaccard = (a: Set<string>, b: Set<string>) => {
       if (a.size === 0 && b.size === 0) return 0;
@@ -422,19 +456,24 @@ class ProvenanceGraph {
       return intersection / (a.size + b.size - intersection);
     };
 
-    // Calculate profiles
+    // Calculate profiles with fallback extraction
     const profiles = this.nodes.map(n => {
       const sp = n.semanticProfile || { concepts: [], keywords: [], topics: [] };
+      
+      let fallbackText = "";
+      if (!sp.concepts || sp.concepts.length === 0) {
+         fallbackText = `${n.canonicalName} ${n.structuredSummary?.overview || ''} ${n.structuredSummary?.keyTakeaways?.join(' ') || ''}`;
+      }
+      
       return {
         id: n.id,
-        concepts: tokenize(sp.concepts),
-        keywords: tokenize(sp.keywords),
-        topics: tokenize(sp.topics)
+        concepts: tokenizeConcepts(sp.concepts || [], fallbackText),
+        keywords: tokenizeConcepts(sp.keywords || [], ""),
+        topics: tokenizeConcepts(sp.topics || [], "")
       };
     });
 
-    // Score all pairs
-    const newEdges = [];
+    const newEdges: any[] = [];
     
     for (let i = 0; i < profiles.length; i++) {
       let nodeEdges = [];
@@ -442,10 +481,8 @@ class ProvenanceGraph {
         const p1 = profiles[i];
         const p2 = profiles[j];
         
-        // Skip if suppressed
         if (this.suppressedLinks.has(this.getPairKey(p1.id, p2.id))) continue;
         
-        // Skip if manual link exists
         const hasManual = this.edges.some(e => 
           e.origin === 'manual' && 
           ((e.sourceId === p1.id && e.targetId === p2.id) || (e.sourceId === p2.id && e.targetId === p1.id))
@@ -456,53 +493,41 @@ class ProvenanceGraph {
         const keywordScore = calcJaccard(p1.keywords, p2.keywords);
         const topicScore = calcJaccard(p1.topics, p2.topics);
 
-        // Weighted score
         const score = (conceptScore * 0.6) + (keywordScore * 0.3) + (topicScore * 0.1);
 
         if (score >= JACCARD_THRESHOLD) {
-          // Generate reason
           const reasons = [];
           const sharedConcepts = Array.from(p1.concepts).filter(c => p2.concepts.has(c));
-          if (sharedConcepts.length > 0) reasons.push(`Shared concepts: ${sharedConcepts.slice(0,3).join(", ")}`);
-          else if (score >= JACCARD_THRESHOLD) reasons.push("Semantic overlap in topics and keywords");
+          if (sharedConcepts.length > 0) {
+            // Capitalize for display
+            const displayConcepts = sharedConcepts.slice(0,3).map(c => c.charAt(0).toUpperCase() + c.slice(1));
+            reasons.push(`Shared concepts: ${displayConcepts.join(", ")}`);
+          } else if (score >= JACCARD_THRESHOLD) {
+             reasons.push("Semantic overlap in topics and keywords");
+          }
           
           nodeEdges.push({
-            id: `semantic-${p1.id}-${p2.id}`,
+            id: `semantic-${this.getPairKey(p1.id, p2.id)}`,
             sourceId: p1.id,
             targetId: p2.id,
             relationshipType: 'semantic_link',
             confidence: score,
-            origin: 'automatic' as const,
+            origin: 'automatic',
             reason: reasons,
             createdAt: Date.now()
           });
         }
       }
       
-      // Keep only top MAX_LINKS for node i
       nodeEdges.sort((a, b) => b.confidence - a.confidence);
       newEdges.push(...nodeEdges.slice(0, MAX_LINKS));
     }
 
-    // Add new edges (deduplicating them since A->B and B->A will generate same edge if we iterate i then j)
-    // Wait, the loop does `for(let i=0) { for(let j=i+1) }`, so we don't duplicate.
-    this.edges.push(...newEdges);
-  }
-
-  markDebunked(nodeId: string) {
-    const nodeIndex = this.nodes.findIndex(n => n.id === nodeId);
-    if (nodeIndex >= 0) {
-      this.nodes = [
-        ...this.nodes.slice(0, nodeIndex),
-        { ...this.nodes[nodeIndex], trustScore: 0, verificationStatus: 'debunked' as const },
-        ...this.nodes.slice(nodeIndex + 1)
-      ];
-    }
-  }
-
-  deleteNode(nodeId: string) {
-    this.nodes = this.nodes.filter(n => n.id !== nodeId);
-    this.edges = this.edges.filter(e => e.sourceId !== nodeId && e.targetId !== nodeId);
+    // Deduplicate edges before pushing
+    const edgeMap = new Map();
+    for (const e of newEdges) edgeMap.set(e.id, e);
+    
+    this.edges.push(...Array.from(edgeMap.values()));
     this.saveState();
   }
 
