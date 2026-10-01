@@ -320,23 +320,7 @@ export default function Dashboard() {
     setSelectedEdge(null);
     
     setActiveTab('summary');
-    const outgoingEdges = edges.filter(e => e.sourceId === node.id);
-    if (outgoingEdges.length > 0) {
-      setLoadingSummary(true);
-      try {
-        const res = await fetch('/api/oversummary', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nodeId: node.id }),
-        });
-        const data = await res.json();
-        setOverSummary(data.overSummary);
-      } catch {
-        setOverSummary('Error fetching over-summary.');
-      } finally {
-        setLoadingSummary(false);
-      }
-    }
+    
   };
 
   const handleLinkNodes = async (e: React.FormEvent) => {
