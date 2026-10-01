@@ -798,42 +798,43 @@ export default function Dashboard() {
               )}
 
               {/* Formulas Liquid Glass Card */}
-              {((selectedNode.structuredSummary?.formulas && selectedNode.structuredSummary.formulas.length > 0) || (selectedNode.formulas && selectedNode.formulas.length > 0)) && (
-                <div className="card-shell" style={{ padding: '20px 24px', marginTop: '16px', background: 'rgba(56, 189, 248, 0.08)', borderColor: 'rgba(56, 189, 248, 0.2)' }}>
-                  <h3 style={{
-                    fontSize: 11, fontWeight: 700, color: 'var(--secondary)',
-                    textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14,
-                    display: 'flex', alignItems: 'center', gap: 6,
-                  }}>
-                    Formulas on this page
-                  </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {(selectedNode.structuredSummary?.formulas || selectedNode.formulas || []).map((f: any, i: number) => (
-                      <div key={i} style={{ background: 'rgba(0,0,0,0.2)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.15)' }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 12 }}>
-                          {f.label || f.type || 'Formula'}
-                        </div>
-                        <div style={{ overflowX: 'auto', paddingBottom: 8 }}>
-                          <BlockMath math={f.latex} />
-                        </div>
-                        {f.context && (
-                          <div style={{ fontSize: 12, color: 'var(--text-disabled)', marginTop: 8, fontStyle: 'italic' }}>
-                            {f.context}
+                {(() => {
+                  const validFormulas = (selectedNode.structuredSummary?.formulas || selectedNode.formulas || []).filter((f: any) => f.latex && f.latex.trim().length > 0);
+                  if (validFormulas.length === 0) return null;
+                  return (
+                    <div className="card-shell" style={{ padding: '20px 24px', marginTop: '16px', background: 'rgba(56, 189, 248, 0.08)', borderColor: 'rgba(56, 189, 248, 0.2)' }}>
+                      <h3 style={{
+                        fontSize: 11, fontWeight: 700, color: 'var(--secondary)',
+                        textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14,
+                        display: 'flex', alignItems: 'center', gap: 6,
+                      }}>
+                        Formulas on this page
+                      </h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {validFormulas.map((f: any, i: number) => (
+                          <div key={i} style={{ background: 'rgba(0,0,0,0.2)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.15)' }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 12 }}>
+                              {f.label || f.type || 'Formula'}
+                            </div>
+                            <div style={{ overflowX: 'auto', paddingBottom: 8 }}>
+                              <BlockMath math={f.latex} />
+                            </div>
+                            {f.context && (
+                              <div style={{ fontSize: 12, color: 'var(--text-disabled)', marginTop: 8, fontStyle: 'italic' }}>
+                                {f.context}
+                              </div>
+                            )}
+                            {!f.context && f.surroundingContext && (
+                              <div style={{ fontSize: 12, color: 'var(--text-disabled)', marginTop: 8, fontStyle: 'italic' }}>
+                                {f.surroundingContext}
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {!f.context && f.surroundingContext && (
-                          <div style={{ fontSize: 12, color: 'var(--text-disabled)', marginTop: 8, fontStyle: 'italic' }}>
-                            {f.surroundingContext}
-                          </div>
-                        )}
+                        ))}
                       </div>
-                    ))}
-                  </div>
-  
-              
-
-              </div>
-              )}
+                    </div>
+                  );
+                })()}
 
               {/* Worked Problems Liquid Glass Card */}
               {selectedNode.workedProblems && selectedNode.workedProblems.length > 0 && (
