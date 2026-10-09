@@ -264,7 +264,7 @@ class ProvenanceGraph {
 
       // 1. Always save locally as a backup
       try {
-        const dbPath = path.join(process.cwd(), 'database.json');
+        const dbPath = process.env.VERCEL ? path.join('/tmp', 'database.json') : path.join(process.cwd(), 'database.json');
         fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf-8');
       } catch (e) { console.log('Local save skipped (read-only FS)'); }
 
@@ -324,7 +324,7 @@ class ProvenanceGraph {
 
       // 2. Fallback to Local JSON
       if (!loadedData) {
-        const dbPath = path.join(process.cwd(), 'database.json');
+        const dbPath = process.env.VERCEL ? path.join('/tmp', 'database.json') : path.join(process.cwd(), 'database.json');
         if (fs.existsSync(dbPath)) {
           const raw = fs.readFileSync(dbPath, 'utf-8');
           loadedData = JSON.parse(raw);
@@ -358,7 +358,7 @@ class ProvenanceGraph {
     this.nodes = processIncomingEntities(allEntities, this.nodes);
     this.edges = generateEdgesFromPage(pageSubjectId, extractedEntities, this.edges);
     this.saveState();
-    return { nodes: this.nodes, edges: this.edges };
+    return { nodes: this.nodes, edges: this.edges, isEphemeral: !hasDb };
   }
 
   updateNode(id: string, updatedFields: Partial<TrustNode>) {
@@ -550,7 +550,8 @@ class ProvenanceGraph {
   }
 
   getGraphData() {
-    return { nodes: this.nodes, edges: this.edges };
+    const hasDb = !!(process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.STORAGE_URL);
+    return { nodes: this.nodes, edges: this.edges, isEphemeral: !hasDb };
   }
 }
 const globalAny: any = globalThis;
@@ -563,5 +564,8 @@ if (globalAny._globalGraph) {
 if (process.env.NODE_ENV !== 'production') {
   globalAny._globalGraph = globalGraph;
 }
+
+
+
 
 
