@@ -358,7 +358,7 @@ class ProvenanceGraph {
     this.nodes = processIncomingEntities(allEntities, this.nodes);
     this.edges = generateEdgesFromPage(pageSubjectId, extractedEntities, this.edges);
     this.saveState();
-    return { nodes: this.nodes, edges: this.edges, isEphemeral: !hasDb };
+    return { nodes: this.nodes, edges: this.edges };
   }
 
   updateNode(id: string, updatedFields: Partial<TrustNode>) {
@@ -564,6 +564,8 @@ if (globalAny._globalGraph) {
 if (process.env.NODE_ENV !== 'production') {
   globalAny._globalGraph = globalGraph;
 }
+
+
 
 
 
