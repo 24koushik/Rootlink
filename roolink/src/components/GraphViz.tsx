@@ -171,6 +171,7 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
         .on('tick', () => {
           if (graphRefs.current.linkGroup && graphRefs.current.pulseGroup) {
             const linkPath = (d: any) => {
+              if (d.source.x === undefined || d.target.x === undefined) return '';
               const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y, dr = Math.sqrt(dx * dx + dy * dy) * 1.2;
               return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
             };
@@ -180,14 +181,14 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
             // Calculate label coordinates based on bezier curve
             graphRefs.current.linkGroup.selectAll('text.edge-label')
               .attr('x', (d: any) => {
+                 if (d.source.x === undefined || d.target.x === undefined) return 0;
                  const dx = d.target.x - d.source.x;
-                 const dy = d.target.y - d.source.y;
                  return d.source.x + dx / 2; // Midpoint
               })
               .attr('y', (d: any) => {
+                 if (d.source.y === undefined || d.target.y === undefined) return 0;
                  const dx = d.target.x - d.source.x;
                  const dy = d.target.y - d.source.y;
-                 const dr = Math.sqrt(dx * dx + dy * dy) * 1.2;
                  return d.source.y + dy / 2 - 10; // Slightly above midpoint
               });
           }
@@ -252,11 +253,7 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
     });
 
     const currentNodeIds = new Set(d3Nodes.map(n => n.id));
-    const currentLinkIds = new Set(validLinks.map(l => {
-      const sId = typeof l.source === 'string' ? l.source : (l.source as any).id;
-      const tId = typeof l.target === 'string' ? l.target : (l.target as any).id;
-      return `${sId}-${tId}`;
-    }));
+    const currentLinkIds = new Set(validLinks.map(l => (l as any).id));
 
     // Check Topology changes
     let topologyChanged = false;
@@ -289,7 +286,7 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
 
     // Update Links
     linkGroup!.selectAll('path')
-      .data(validLinks, (d: any) => `${d.source.id || d.source}-${d.target.id || d.target}`)
+      .data(validLinks, (d: any) => (d as any).id)
       .join('path')
       .attr('class', 'edge-path')
       .style('cursor', 'pointer')
@@ -302,7 +299,7 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
       
     // Add Labels for Links (Semantic AI vs Manual)
     const linkLabelJoin = linkGroup!.selectAll('text.edge-label')
-      .data(validLinks, (d: any) => `${d.source.id || d.source}-${d.target.id || d.target}`)
+      .data(validLinks, (d: any) => `label-${(d as any).id}`)
       .join('text')
       .attr('class', 'edge-label')
       .attr('fill', (d: any) => (d as any).origin === 'automatic' ? 'rgba(59, 130, 246, 0.6)' : (d as any).origin === 'manual' ? 'rgba(53, 214, 199, 0.8)' : 'none')
@@ -313,7 +310,7 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
 
 
     pulseGroup!.selectAll('path')
-      .data(validLinks, (d: any) => `pulse-${d.source.id || d.source}-${d.target.id || d.target}`)
+      .data(validLinks, (d: any) => `pulse-${(d as any).id}`)
       .join('path')
       .attr('class', 'edge-pulse edge-flow')
       .attr('fill', 'none')

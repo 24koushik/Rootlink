@@ -280,8 +280,8 @@ export default function Dashboard() {
       const normalizedEdges = Array.isArray(data?.edges) ? data.edges : [];
       
       if (normalizedNodes.length > 0) {
-        setRawNodes(normalizedNodes);
-        setRawEdges(normalizedEdges);
+        setRawNodes(prev => (data.isEphemeral && prev.length > normalizedNodes.length) ? prev : normalizedNodes);
+        setRawEdges(prev => (data.isEphemeral && prev.length > normalizedEdges.length) ? prev : normalizedEdges);
 
         // Auto-select newly captured node
         if (lastKnownNodeIds.current.size > 0) {
@@ -305,7 +305,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchGraph();
-    const interval = setInterval(fetchGraph, 3000);
+    const interval = setInterval(() => { if (!(window as any)._isEphemeral) fetchGraph(); }, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -370,8 +370,8 @@ export default function Dashboard() {
         const normalizedNodes = Array.isArray(updatedData?.nodes) ? updatedData.nodes : (Array.isArray(updatedData) ? updatedData : []);
         const normalizedEdges = Array.isArray(updatedData?.edges) ? updatedData.edges : [];
         
-        setRawNodes(normalizedNodes);
-        setRawEdges(normalizedEdges);
+        setRawNodes(prev => (updatedData.isEphemeral && prev.length > normalizedNodes.length) ? prev : normalizedNodes);
+        setRawEdges(prev => (updatedData.isEphemeral && prev.length > normalizedEdges.length) ? prev : normalizedEdges);
         setLinkSource('');
         setLinkTarget('');
         showToast('\u2713 Trust link established successfully');
@@ -400,8 +400,8 @@ export default function Dashboard() {
         const normalizedNodes = Array.isArray(updatedData?.nodes) ? updatedData.nodes : (Array.isArray(updatedData) ? updatedData : []);
         const normalizedEdges = Array.isArray(updatedData?.edges) ? updatedData.edges : [];
         
-        setRawNodes(normalizedNodes);
-        setRawEdges(normalizedEdges);
+        setRawNodes(prev => (updatedData.isEphemeral && prev.length > normalizedNodes.length) ? prev : normalizedNodes);
+        setRawEdges(prev => (updatedData.isEphemeral && prev.length > normalizedEdges.length) ? prev : normalizedEdges);
         
         if (selectedNode?.id === nodeToDelete) {
           setSelectedNode(null);
@@ -435,8 +435,8 @@ export default function Dashboard() {
         const normalizedNodes = Array.isArray(updatedData?.nodes) ? updatedData.nodes : (Array.isArray(updatedData) ? updatedData : []);
         const normalizedEdges = Array.isArray(updatedData?.edges) ? updatedData.edges : [];
         
-        setRawNodes(normalizedNodes);
-        setRawEdges(normalizedEdges);
+        setRawNodes(prev => (updatedData.isEphemeral && prev.length > normalizedNodes.length) ? prev : normalizedNodes);
+        setRawEdges(prev => (updatedData.isEphemeral && prev.length > normalizedEdges.length) ? prev : normalizedEdges);
         showToast('✓ Link removed successfully');
       } else {
         showToast('✗ Failed to remove link');
