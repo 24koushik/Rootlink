@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
+  await globalGraph.ensureLoaded();
   try {
     const { nodeId } = await request.json();
     if (!nodeId) return NextResponse.json({ success: false, error: 'Missing nodeId' }, { status: 400 });

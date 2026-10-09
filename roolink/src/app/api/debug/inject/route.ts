@@ -4,6 +4,7 @@ import { globalGraph, TrustNode } from '@/lib/graph';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  await globalGraph.ensureLoaded();
   try {
     const data = await req.json();
     globalGraph.nodes.push(...data.nodes);

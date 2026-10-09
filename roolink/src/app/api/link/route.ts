@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { globalGraph } from '@/lib/graph';
 
 export async function POST(req: Request) {
+  await globalGraph.ensureLoaded();
   try {
     const body = await req.json();
     const { sourceId, targetId } = body;
@@ -21,6 +22,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  await globalGraph.ensureLoaded();
   try {
     const body = await req.json();
     const { sourceId, targetId } = body;

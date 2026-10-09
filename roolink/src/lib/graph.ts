@@ -263,8 +263,10 @@ class ProvenanceGraph {
       };
 
       // 1. Always save locally as a backup
-      const dbPath = path.join(process.cwd(), 'database.json');
-      fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf-8');
+      try {
+        const dbPath = path.join(process.cwd(), 'database.json');
+        fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf-8');
+      } catch (e) { console.log('Local save skipped (read-only FS)'); }
 
       // 2. If Vercel Postgres is connected, save to cloud
       if (process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.STORAGE_URL) {
@@ -286,6 +288,13 @@ class ProvenanceGraph {
     } catch (e) {
       console.error('Failed to save graph state:', e);
     }
+  }
+
+  private _isLoaded = false;
+  public async ensureLoaded() {
+    if (this._isLoaded) return;
+    await this.loadState();
+    this._isLoaded = true;
   }
 
   private async loadState() {
@@ -554,3 +563,5 @@ if (globalAny._globalGraph) {
 if (process.env.NODE_ENV !== 'production') {
   globalAny._globalGraph = globalGraph;
 }
+
+

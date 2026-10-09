@@ -8,11 +8,13 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function GET() {
+  await globalGraph.ensureLoaded();
   const graphData = globalGraph.getGraphData();
   return NextResponse.json(graphData);
 }
 
 export async function DELETE(request: Request) {
+  await globalGraph.ensureLoaded();
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
@@ -28,6 +30,7 @@ export async function DELETE(request: Request) {
 }
 
 export async function POST(request: Request) {
+  await globalGraph.ensureLoaded();
   try {
     const body = await request.json();
     let { url, title, rawContent, formulas = [], workedProblems = [], isYouTube: clientIsYouTube, videoId: clientVideoId, channelName, durationSeconds, transcriptSource, transcriptSegments } = body;
@@ -185,3 +188,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
+
+

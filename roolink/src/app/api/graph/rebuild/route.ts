@@ -4,6 +4,7 @@ import { globalGraph } from '@/lib/graph';
 export const dynamic = 'force-dynamic';
 
 export async function POST() {
+  await globalGraph.ensureLoaded();
   try {
     globalGraph.recalculateAutomaticLinks();
     return NextResponse.json(globalGraph.getGraphData());

@@ -20,6 +20,7 @@ function extractJSON(text: string): any {
 }
 
 export async function POST(request: Request) {
+  await globalGraph.ensureLoaded();
   try {
     const body = await request.json();
     const { nodeId } = body;
@@ -69,7 +70,7 @@ Do NOT use generic branches like "Document Content". Use real structural concept
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'http://localhost:3000',
+          'HTTP-Referer': 'https://roolink.vercel.app',
           'X-Title': 'Rootlink'
         },
         signal: controller.signal,

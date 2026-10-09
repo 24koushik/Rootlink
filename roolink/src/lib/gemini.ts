@@ -128,7 +128,7 @@ CRITICAL INSTRUCTIONS:
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:3000',
+        'HTTP-Referer': 'https://roolink.vercel.app',
         'X-Title': 'Rootlink'
       },
       signal: controller.signal,
@@ -179,7 +179,7 @@ Source: ${content.substring(0, 5000)}`;
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:3000',
+        'HTTP-Referer': 'https://roolink.vercel.app',
         'X-Title': 'Rootlink'
       },
       signal: controller.signal,

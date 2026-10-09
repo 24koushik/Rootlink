@@ -3,6 +3,7 @@ import { globalGraph } from '@/lib/graph';
 import { generateGlobalSummary } from '@/lib/gemini';
 
 export async function POST(req: Request) {
+  await globalGraph.ensureLoaded();
   try {
     const nodes = globalGraph.nodes;
     
