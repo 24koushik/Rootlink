@@ -24,7 +24,6 @@ export default function MindMapViz({ mindMap: data }: MindMapVizProps) {
   useEffect(() => {
     if (!svgRef.current || !wrapperRef.current) return;
     
-    // Only initialize once
     if (!zoomBehaviorRef.current) {
       const svg = d3.select(svgRef.current);
       
@@ -42,7 +41,6 @@ export default function MindMapViz({ mindMap: data }: MindMapVizProps) {
           setZoomLevel(event.transform.k);
         });
 
-      // We attach the zoom behavior to the SVG
       svg.call(zoom as any);
       zoomBehaviorRef.current = zoom as any;
     }
@@ -54,7 +52,6 @@ export default function MindMapViz({ mindMap: data }: MindMapVizProps) {
 
     const dataHash = JSON.stringify(data);
     if (lastDataHashRef.current === dataHash) {
-      // It's just a React re-render, data hasn't structurally changed. DO NOT reset the viewport.
       return;
     }
     lastDataHashRef.current = dataHash;
@@ -124,7 +121,7 @@ export default function MindMapViz({ mindMap: data }: MindMapVizProps) {
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
     mergedNodes.forEach((d: any) => {
       const cardW = d.depth === 0 ? 260 : 220;
-      const cardH = d.depth === 0 ? 120 : 100;
+      const cardH = d.depth === 0 ? 100 : 90;
       let left = d.x, right = d.x, top = d.y, bottom = d.y;
       
       if (d.depth === 0) { left = d.x - cardW/2; right = d.x + cardW/2; top = d.y - cardH/2; bottom = d.y + cardH/2; }
@@ -140,27 +137,21 @@ export default function MindMapViz({ mindMap: data }: MindMapVizProps) {
     x0 -= 60; x1 += 60; y0 -= 60; y1 += 60;
     boundsRef.current = { x0, x1, y0, y1 };
 
-    // Initial Fit to view because it is new data
-    doFitToView(0); // 0 transition duration for initial render
+    doFitToView(0);
 
-    // 4. Render SVG Elements
-    const defs = zoomGroup.append('defs');
-    const rootBg = defs.append('linearGradient').attr('id', 'rootBg').attr('x1', '0%').attr('y1', '0%').attr('x2', '100%').attr('y2', '100%');
-    rootBg.append('stop').attr('offset', '0%').attr('stop-color', 'rgba(53, 214, 199, 0.15)');
-    rootBg.append('stop').attr('offset', '100%').attr('stop-color', 'rgba(108, 124, 255, 0.1)');
-
+    // 4. Render SVG Elements (Curved Green Lines)
     zoomGroup.append('g').selectAll('path').data(mergedLinks).join('path').attr('d', (d: any) => {
       const s = d.source; const t = d.target;
       let sx = s.x, sy = s.y; let tx = t.x, ty = t.y;
 
       if (s.depth === 0) {
-        if (t.dir === 'right') sx += 130; else if (t.dir === 'left') sx -= 130; else if (t.dir === 'bottom') sy += 60; else if (t.dir === 'top') sy -= 60;
+        if (t.dir === 'right') sx += 130; else if (t.dir === 'left') sx -= 130; else if (t.dir === 'bottom') sy += 50; else if (t.dir === 'top') sy -= 50;
       } else {
-        if (s.dir === 'right') sx += 230; else if (s.dir === 'left') sx -= 230; else if (s.dir === 'bottom') sy += 110; else if (s.dir === 'top') sy -= 110;
+        if (s.dir === 'right') sx += 230; else if (s.dir === 'left') sx -= 230; else if (s.dir === 'bottom') sy += 90; else if (s.dir === 'top') sy -= 90;
       }
       if (t.dir === 'right' || t.dir === 'left') return `M${sx},${sy} C${(sx + tx)/2},${sy} ${(sx + tx)/2},${ty} ${tx},${ty}`;
       else return `M${sx},${sy} C${sx},${(sy + ty)/2} ${tx},${(sy + ty)/2} ${tx},${ty}`;
-    }).attr('fill', 'none').attr('stroke', 'rgba(108, 124, 255, 0.25)').attr('stroke-width', (d: any) => Math.max(1, 4 - d.target.depth)).attr('stroke-linecap', 'round');
+    }).attr('fill', 'none').attr('stroke', '#86efac').attr('stroke-width', (d: any) => Math.max(1.5, 3 - d.target.depth)).attr('stroke-linecap', 'round');
 
     const nodesG = zoomGroup.append('g').selectAll('g').data(mergedNodes).join('g').attr('transform', (d: any) => `translate(${d.x},${d.y})`);
 
@@ -171,24 +162,27 @@ export default function MindMapViz({ mindMap: data }: MindMapVizProps) {
       if (d.dir === 'bottom' || d.dir === 'top') return -110;
       return 0;
     }).attr('y', (d: any) => {
-      if (d.depth === 0) return -60;
-      if (d.dir === 'right' || d.dir === 'left') return -50;
+      if (d.depth === 0) return -50;
+      if (d.dir === 'right' || d.dir === 'left') return -45;
       if (d.dir === 'bottom') return 10;
-      if (d.dir === 'top') return -110;
+      if (d.dir === 'top') return -100;
       return 0;
-    }).attr('width', (d: any) => d.depth === 0 ? 260 : 220).attr('height', 200).style('overflow', 'visible').html((d: any) => {
+    }).attr('width', (d: any) => d.depth === 0 ? 260 : 220).attr('height', 180).style('overflow', 'visible').html((d: any) => {
       const item = d.data;
       const titleStr = String(item.title || '');
       const descStr = item.description ? String(item.description) : '';
       if (d.depth === 0) {
-        return `<div style="width: 260px; padding: 16px; background: url(#rootBg) var(--bg-card); border: 2px solid var(--primary); border-radius: 12px; backdrop-filter: blur(10px); box-shadow: 0 8px 32px rgba(53, 214, 199, 0.2); text-align: center; color: white;">
-          <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 700; letter-spacing: -0.02em;">${titleStr}</h3>
-          <p style="margin: 0; font-size: 12px; opacity: 0.8; line-height: 1.4;">${descStr}</p>
+        // Deep emerald green root node (Image 4)
+        return `<div style="width: 260px; padding: 14px 18px; background: #136c4b; border: 1.5px solid #0e563b; border-radius: 10px; box-shadow: 0 4px 16px rgba(19, 108, 75, 0.25); text-align: center; color: white;">
+          <h3 style="margin: 0; font-size: 13px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;">${titleStr}</h3>
+          ${descStr ? `<p style="margin: 6px 0 0 0; font-size: 11px; opacity: 0.9; line-height: 1.4;">${descStr}</p>` : ''}
         </div>`;
       } else {
-        return `<div style="width: 220px; padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(108, 124, 255, 0.3); border-radius: 8px; backdrop-filter: blur(8px); text-align: left; color: white;">
-          <h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: 600; color: var(--primary);">${titleStr}</h4>
-          ${descStr ? `<p style="margin: 0; font-size: 11px; opacity: 0.7; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">${descStr}</p>` : ''}
+        // Soft mint branch card (Image 4)
+        return `<div style="width: 220px; padding: 10px 14px; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 10px; box-shadow: 0 2px 8px rgba(0, 40, 20, 0.04); text-align: center; color: #1f2937;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #10b981; margin: 0 auto 6px auto;"></div>
+          <h4 style="margin: 0 0 4px 0; font-size: 11px; font-weight: 800; color: #14532d; letter-spacing: 0.02em; text-transform: uppercase;">${titleStr}</h4>
+          ${descStr ? `<p style="margin: 0; font-size: 10px; color: #374151; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">${descStr}</p>` : ''}
         </div>`;
       }
     });
@@ -236,24 +230,24 @@ export default function MindMapViz({ mindMap: data }: MindMapVizProps) {
     doFitToView(750);
   };
 
-  if (!data || !data.root) return <div style={{ color: 'var(--text-disabled)' }}>Invalid mind map data.</div>;
+  if (!data || !data.root) return <div style={{ color: '#6b7280', fontSize: '13px' }}>Invalid mind map data.</div>;
 
   return (
-    <div ref={wrapperRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+    <div ref={wrapperRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', background: '#f9fdfa' }}>
       <svg ref={svgRef} style={{ width: '100%', height: '100%', display: 'block', cursor: 'grab' }} />
-      <div style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', gap: '8px', background: 'rgba(0,0,0,0.4)', padding: '6px', borderRadius: '12px', border: '1px solid var(--border-glass)', backdropFilter: 'blur(10px)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', overflow: 'hidden' }}>
-          <button onClick={(e) => { e.stopPropagation(); handleZoom(-1); }} style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', fontSize: 18, opacity: zoomLevel <= 0.15 ? 0.3 : 1 }} disabled={zoomLevel <= 0.15}>
+      <div style={{ position: 'absolute', bottom: 16, right: 16, display: 'flex', gap: '6px', background: '#ffffff', padding: '4px', borderRadius: '8px', border: '1px solid #d1d5db', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', background: '#f3f4f6', borderRadius: '6px', overflow: 'hidden' }}>
+          <button onClick={(e) => { e.stopPropagation(); handleZoom(-1); }} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: '#111827', cursor: 'pointer', fontSize: 16, opacity: zoomLevel <= 0.15 ? 0.3 : 1 }} disabled={zoomLevel <= 0.15}>
             -
           </button>
-          <div style={{ width: '40px', textAlign: 'center', fontSize: '11px', color: 'var(--text-disabled)', fontFamily: 'monospace' }}>
+          <div style={{ width: '36px', textAlign: 'center', fontSize: '11px', color: '#4b5563', fontFamily: 'monospace', fontWeight: 600 }}>
             {Math.round(zoomLevel * 100)}%
           </div>
-          <button onClick={(e) => { e.stopPropagation(); handleZoom(1); }} style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', fontSize: 18, opacity: zoomLevel >= 3.5 ? 0.3 : 1 }} disabled={zoomLevel >= 3.5}>
+          <button onClick={(e) => { e.stopPropagation(); handleZoom(1); }} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: '#111827', cursor: 'pointer', fontSize: 16, opacity: zoomLevel >= 3.5 ? 0.3 : 1 }} disabled={zoomLevel >= 3.5}>
             +
           </button>
-          <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
-          <button onClick={handleFitToView} style={{ padding: '0 12px', height: 32, borderRadius: '8px', background: 'transparent', border: 'none', color: 'var(--primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>
+          <div style={{ width: 1, height: 14, background: '#d1d5db', margin: '0 2px' }} />
+          <button onClick={handleFitToView} style={{ padding: '0 8px', height: 28, borderRadius: '6px', background: 'transparent', border: 'none', color: '#15803d', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
             FIT
           </button>
         </div>

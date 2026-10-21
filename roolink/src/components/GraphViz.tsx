@@ -8,8 +8,8 @@ interface GraphVizProps {
   nodes: TrustNode[];
   edges?: TrustEdge[];
   onNodeSelect: (node: TrustNode) => void;
-    onEdgeSelect?: (edge: TrustEdge) => void;
-selectedNodeId?: string | null;
+  onEdgeSelect?: (edge: TrustEdge) => void;
+  selectedNodeId?: string | null;
   searchQuery?: string;
 }
 
@@ -20,10 +20,10 @@ interface TooltipData {
 }
 
 function getNodeColor(node: TrustNode): string {
-  if (node.trustScore === 0) return 'var(--trust-low)';
-  if (node.trustScore >= 0.75) return 'var(--trust-high)';
-  if (node.trustScore >= 0.50) return 'var(--trust-med)';
-  return 'var(--trust-unverified)';
+  if (node.trustScore === 0) return '#ef4444';
+  if (node.trustScore >= 0.75) return '#10b981';
+  if (node.trustScore >= 0.50) return '#f59e0b';
+  return '#94a3b8';
 }
 
 function getNodeRadius(node: TrustNode, incomingEdges: number): number {
@@ -119,11 +119,11 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
         .attr('orient', 'auto')
         .append('path')
         .attr('d', 'M0,-4L8,0L0,4')
-        .attr('fill', 'rgba(255,255,255,0.3)');
+        .attr('fill', 'rgba(16, 185, 129, 0.4)');
 
-      // Grid
-      const pattern = defs.append('pattern').attr('id', 'radar-grid').attr('width', 80).attr('height', 80).attr('patternUnits', 'userSpaceOnUse');
-      pattern.append('path').attr('d', 'M 80 0 L 0 0 0 80').attr('fill', 'none').attr('stroke', 'rgba(255,255,255,0.03)').attr('stroke-width', 1);
+      // Grid Pattern (Soft Mint Lines)
+      const pattern = defs.append('pattern').attr('id', 'radar-grid').attr('width', 60).attr('height', 60).attr('patternUnits', 'userSpaceOnUse');
+      pattern.append('path').attr('d', 'M 60 0 L 0 0 0 60').attr('fill', 'none').attr('stroke', 'rgba(16, 185, 129, 0.08)').attr('stroke-width', 1);
       const gridRect = svg.append('rect').attr('width', '100%').attr('height', '100%').attr('fill', 'url(#radar-grid)');
 
       const g = svg.append('g');
@@ -132,7 +132,7 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
         .scaleExtent([0.15, 4])
         .on('zoom', (event) => {
           g.attr('transform', event.transform);
-          gridRect.attr('transform', `translate(${event.transform.x % 80}, ${event.transform.y % 80}) scale(${event.transform.k})`);
+          gridRect.attr('transform', `translate(${event.transform.x % 60}, ${event.transform.y % 60}) scale(${event.transform.k})`);
           if (graphRefs.current.mmViewport) {
             graphRefs.current.mmViewport
               .attr('x', -event.transform.x / event.transform.k)
@@ -144,24 +144,20 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
       svg.call(zoom);
       graphRefs.current.zoom = zoom;
 
-      // Gradients & Filters
-      ['var(--trust-high)', 'var(--trust-med)', 'var(--trust-low)', 'var(--trust-unverified)'].forEach(color => {
+      // 3D Marble Gradients
+      ['#10b981', '#f59e0b', '#ef4444', '#94a3b8'].forEach(color => {
         const safeId = color.replace(/[^a-zA-Z0-9-]/g, '');
-        const grad = defs.append('radialGradient').attr('id', `marble-${safeId}`).attr('cx', '30%').attr('cy', '30%').attr('r', '70%');
-        grad.append('stop').attr('offset', '0%').attr('stop-color', '#fff').attr('stop-opacity', 0.8);
-        grad.append('stop').attr('offset', '20%').attr('stop-color', color).attr('stop-opacity', 0.9);
-        grad.append('stop').attr('offset', '100%').attr('stop-color', color).attr('stop-opacity', 0.2);
+        const grad = defs.append('radialGradient').attr('id', `marble-${safeId}`).attr('cx', '35%').attr('cy', '35%').attr('r', '65%');
+        grad.append('stop').attr('offset', '0%').attr('stop-color', '#ffffff').attr('stop-opacity', 0.9);
+        grad.append('stop').attr('offset', '35%').attr('stop-color', color).attr('stop-opacity', 0.95);
+        grad.append('stop').attr('offset', '100%').attr('stop-color', '#064e3b').attr('stop-opacity', 0.9);
       });
 
-      const filter = defs.append('filter').attr('id', 'glitch-filter');
-      filter.append('feTurbulence').attr('type', 'fractalNoise').attr('baseFrequency', '0.1 0.05').attr('numOctaves', '2').attr('result', 'noise');
-      filter.append('feDisplacementMap').attr('in', 'SourceGraphic').attr('in2', 'noise').attr('scale', '5').attr('xChannelSelector', 'R').attr('yChannelSelector', 'G');
-
       const shadowFilter = defs.append('filter').attr('id', 'shadow').attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
-      shadowFilter.append('feDropShadow').attr('dx', '0').attr('dy', '8').attr('stdDeviation', '12').attr('flood-color', 'rgba(0,0,0,0.6)');
+      shadowFilter.append('feDropShadow').attr('dx', '0').attr('dy', '4').attr('stdDeviation', '6').attr('flood-color', 'rgba(16, 185, 129, 0.25)');
 
       const blurFilter = defs.append('filter').attr('id', 'glow-blur').attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
-      blurFilter.append('feGaussianBlur').attr('stdDeviation', '16');
+      blurFilter.append('feGaussianBlur').attr('stdDeviation', '14');
 
       const simulation = d3.forceSimulation()
         .force('link', d3.forceLink().id((d: any) => d.id).distance(180).strength(0.6))
@@ -183,13 +179,13 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
               .attr('x', (d: any) => {
                  if (d.source.x === undefined || d.target.x === undefined) return 0;
                  const dx = d.target.x - d.source.x;
-                 return d.source.x + dx / 2; // Midpoint
+                 return d.source.x + dx / 2;
               })
               .attr('y', (d: any) => {
                  if (d.source.y === undefined || d.target.y === undefined) return 0;
                  const dx = d.target.x - d.source.x;
                  const dy = d.target.y - d.source.y;
-                 return d.source.y + dy / 2 - 10; // Slightly above midpoint
+                 return d.source.y + dy / 2 - 10;
               });
           }
           if (graphRefs.current.nodeGroup) {
@@ -208,8 +204,8 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
         });
 
       const mmSvg = d3.select(minimapRef.current)
-        .attr('width', 220)
-        .attr('height', 150)
+        .attr('width', 80)
+        .attr('height', 55)
         .attr('viewBox', `0 0 ${width} ${height}`);
 
       graphRefs.current = {
@@ -220,7 +216,7 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
         pulseGroup: g.append('g'),
         nodeGroup: g.append('g'),
         mmg: mmSvg.append('g').attr('class', 'minimap-nodes'),
-        mmViewport: mmSvg.append('rect').attr('class', 'minimap-viewport').attr('fill', 'rgba(217, 70, 239, 0.1)').attr('stroke', 'var(--primary-light)').attr('stroke-width', 16).attr('rx', 32),
+        mmViewport: mmSvg.append('rect').attr('class', 'minimap-viewport').attr('fill', 'rgba(16, 185, 129, 0.12)').attr('stroke', '#10b981').attr('stroke-width', 8).attr('rx', 16),
         width,
         height,
         previousNodeIds: new Set(),
@@ -292,22 +288,21 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
       .style('cursor', 'pointer')
       .on('click', (event, d) => { event.stopPropagation(); if(callbacksRef.current.onEdgeSelect) callbacksRef.current.onEdgeSelect(d as unknown as TrustEdge); })
       .attr('fill', 'none')
-      .attr('stroke', (d: any) => (d as any).origin === 'automatic' ? 'rgba(59, 130, 246, 0.4)' : (d as any).origin === 'manual' ? 'rgba(168, 85, 247, 0.4)' : 'rgba(255,255,255,0.06)')
-      .attr('stroke-width', (d: any) => (d as any).origin === 'manual' ? 3 : (d as any).origin === 'automatic' ? 2 : 2)
+      .attr('stroke', (d: any) => (d as any).origin === 'automatic' ? 'rgba(16, 185, 129, 0.35)' : (d as any).origin === 'manual' ? 'rgba(21, 128, 61, 0.7)' : 'rgba(148, 163, 184, 0.4)')
+      .attr('stroke-width', (d: any) => (d as any).origin === 'manual' ? 2.5 : 1.5)
       .attr('stroke-dasharray', (d: any) => (d as any).origin === 'automatic' ? '4,4' : 'none')
       .attr('marker-end', 'url(#arrow-default)');
       
-    // Add Labels for Links (Semantic AI vs Manual)
-    const linkLabelJoin = linkGroup!.selectAll('text.edge-label')
+    // Add Labels for Links
+    linkGroup!.selectAll('text.edge-label')
       .data(validLinks, (d: any) => `label-${(d as any).id}`)
       .join('text')
       .attr('class', 'edge-label')
-      .attr('fill', (d: any) => (d as any).origin === 'automatic' ? 'rgba(59, 130, 246, 0.6)' : (d as any).origin === 'manual' ? 'rgba(53, 214, 199, 0.8)' : 'none')
+      .attr('fill', (d: any) => (d as any).origin === 'automatic' ? '#059669' : '#15803d')
       .attr('font-size', '10px')
       .attr('font-weight', 'bold')
       .attr('text-anchor', 'middle')
       .text((d: any) => (d as any).origin === 'automatic' ? 'AI' : (d as any).origin === 'manual' ? 'MANUAL' : '');
-
 
     pulseGroup!.selectAll('path')
       .data(validLinks, (d: any) => `pulse-${(d as any).id}`)
@@ -316,11 +311,11 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
       .attr('fill', 'none')
       .attr('stroke', (d: any) => {
         const sourceColor = getNodeColor(d.source as TrustNode || d3Nodes.find(n => n.id === d.source) as TrustNode);
-        return sourceColor === 'var(--trust-low)' ? 'var(--trust-low)' : 'var(--primary-light)';
+        return sourceColor;
       })
       .attr('stroke-width', 2)
       .attr('stroke-linecap', 'round')
-      .attr('filter', 'drop-shadow(0 0 6px var(--primary))');
+      .attr('stroke-opacity', 0.6);
 
     // Update Nodes
     const nodeJoin = nodeGroup!.selectAll('.graph-node')
@@ -340,11 +335,11 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
           .on('mouseenter', (event, d) => {
             const [mx, my] = d3.pointer(event, containerRef.current);
             callbacksRef.current.setTooltip({ node: d as TrustNode, x: mx, y: my });
-            d3.select(event.currentTarget).select('.node-visuals').transition().duration(400).ease(d3.easeElasticOut).attr('transform', 'scale(1.2)');
+            d3.select(event.currentTarget).select('.node-visuals').transition().duration(300).ease(d3.easeElasticOut).attr('transform', 'scale(1.15)');
           })
           .on('mouseleave', (event) => {
             callbacksRef.current.setTooltip(null);
-            d3.select(event.currentTarget).select('.node-visuals').transition().duration(400).ease(d3.easeElasticOut).attr('transform', 'scale(1)');
+            d3.select(event.currentTarget).select('.node-visuals').transition().duration(300).ease(d3.easeElasticOut).attr('transform', 'scale(1)');
           })
           .call(d3.drag<SVGGElement, any>()
             .on('start', function(event, d) {
@@ -358,30 +353,26 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
             })
             .on('end', function(event, d) {
               if (!event.active) simulation!.alphaTarget(0);
-              // Nodes stay pinned where dropped to allow manual arrangement
               d3.select(this).classed('graph-dragging', false);
             }) as any
           );
 
           const visuals = g.append('g')
-            .attr('class', 'node-visuals')
-            .style('animation', () => `float-organic ${3 + Math.random() * 2}s ease-in-out infinite alternate`)
-            .style('animation-delay', () => `-${Math.random() * 3}s`)
-            .attr('filter', (d: any) => d.trustScore === 0 ? 'url(#glitch-filter)' : 'none');
+            .attr('class', 'node-visuals');
 
           visuals.append('circle').attr('class', 'node-glow');
           visuals.append('g').attr('class', 'rings-container');
-          visuals.append('circle').attr('class', 'main-circle').attr('stroke', 'rgba(255,255,255,0.4)').attr('stroke-width', 1.5).attr('filter', 'url(#shadow)');
+          visuals.append('circle').attr('class', 'main-circle').attr('stroke', 'rgba(255,255,255,0.8)').attr('stroke-width', 2).attr('filter', 'url(#shadow)');
           
           visuals.append('text').attr('class', 'node-label')
-            .attr('y', 5).attr('font-size', '14px').attr('fill', 'var(--text-heading)')
+            .attr('y', 4).attr('font-size', '13px').attr('fill', '#0f2d24')
             .attr('font-weight', '700').attr('letter-spacing', '-0.01em')
             .attr('font-family', 'Inter, system-ui, sans-serif').attr('pointer-events', 'none')
-            .attr('opacity', 0.95).style('text-shadow', '0 2px 10px rgba(0,0,0,0.8)');
+            .style('text-shadow', '0 1px 3px rgba(255,255,255,0.9), 0 0 2px #ffffff');
 
           visuals.append('text').attr('class', 'node-score')
-            .attr('x', 0).attr('text-anchor', 'middle').attr('font-size', '12px').attr('fill', 'var(--text-disabled)')
-            .attr('font-weight', '800').attr('font-family', 'Sora, system-ui, sans-serif').attr('pointer-events', 'none');
+            .attr('x', 0).attr('text-anchor', 'middle').attr('font-size', '11px').attr('fill', '#15803d')
+            .attr('font-weight', '800').attr('font-family', 'Inter, system-ui, sans-serif').attr('pointer-events', 'none');
 
           g.transition().duration(800).ease(d3.easeElasticOut)
             .attr('transform', (d: any) => `translate(${d.x || width/2},${d.y || height/2}) scale(1)`);
@@ -392,14 +383,12 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
         exit => exit.transition().duration(300).attr('transform', (d: any) => `translate(${d.x},${d.y}) scale(0)`).remove()
       );
 
-    // Update node visual attributes (for both enter and update!)
-    nodeJoin.select('.node-visuals').attr('filter', (d: any) => d.trustScore === 0 ? 'url(#glitch-filter)' : 'none');
-    
+    // Update node visual attributes
     nodeJoin.select('.node-glow')
       .transition().duration(400)
-      .attr('r', (d: any) => d.radius + 20)
+      .attr('r', (d: any) => d.radius + 18)
       .attr('fill', (d: any) => d.color)
-      .attr('opacity', 0.25)
+      .attr('opacity', 0.28)
       .attr('filter', 'url(#glow-blur)')
       .attr('pointer-events', 'none');
 
@@ -411,12 +400,12 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
     nodeJoin.select('.node-label')
       .text((d: any) => truncateLabel(d.canonicalName))
       .transition().duration(400)
-      .attr('x', (d: any) => d.radius + 16);
+      .attr('x', (d: any) => d.radius + 14);
 
     nodeJoin.select('.node-score')
       .text((d: any) => `${Math.round(d.trustScore * 100)}%`)
       .transition().duration(400)
-      .attr('y', (d: any) => d.radius + 24);
+      .attr('y', (d: any) => d.radius + 18);
 
     // Update rings safely
     nodeJoin.select('.rings-container').each(function(d: any) {
@@ -426,19 +415,18 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
         .attr('fill', 'none')
         .attr('stroke', d.color)
         .attr('pointer-events', 'none')
-        .attr('stroke-dasharray', i => i > 1 ? '4,6' : 'none')
-        .style('animation', i => i > 1 ? 'spin-gradient 12s linear infinite' : 'none')
+        .attr('stroke-dasharray', i => i > 1 ? '3,4' : 'none')
         .transition().duration(400)
-        .attr('r', i => d.radius + i * 8)
-        .attr('stroke-width', i => i === d.rings && d.rings >= 3 ? 2 : 1)
-        .attr('stroke-opacity', i => d.rings >= 3 ? 0.5 : 0.2);
+        .attr('r', i => d.radius + i * 7)
+        .attr('stroke-width', 1.2)
+        .attr('stroke-opacity', 0.35);
     });
 
     mmg!.selectAll('circle')
       .data(d3Nodes, (d: any) => d.id)
       .join('circle')
       .transition().duration(400)
-      .attr('r', (d: any) => d.radius * 2.5)
+      .attr('r', (d: any) => d.radius * 2)
       .attr('fill', (d: any) => d.color);
 
     // Feed updated data to simulation
@@ -446,10 +434,8 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
     (simulation!.force('link') as d3.ForceLink<any, any>).links(validLinks);
 
     if (topologyChanged) {
-      // Reheat slightly to accommodate new nodes/edges
       simulation!.alpha(0.3).restart();
     } else {
-      // If we only updated properties (trust score, names), run the tick manually once to update paths without reheating alpha
       simulation!.tick();
     }
 
@@ -533,37 +519,63 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
   return (
     <div ref={containerRef} className="w-full h-full overflow-hidden relative" style={{ background: 'transparent' }}>
       {tooltip && (
-        <div className="node-tooltip liquid-glass" style={{ left: tooltip.x + 20, top: tooltip.y - 15 }}>
-          <div className="heading-style" style={{ fontWeight: 800, fontSize: '15px', marginBottom: 'var(--space-1)', textShadow: 'none' }}>
+        <div className="node-tooltip" style={{ left: tooltip.x + 16, top: tooltip.y - 12 }}>
+          <div style={{ fontWeight: 800, fontSize: '14px', color: '#0f2d24', marginBottom: '4px' }}>
             {tooltip.node.canonicalName}
           </div>
-          <div style={{ fontSize: '14px', color: 'var(--text-body)', marginBottom: 'var(--space-2)', lineHeight: 1.5 }}>
-            {tooltip.node.sourceReferences?.[0]?.contextSnippet?.substring(0, 110) || 'No summary available.'}...
+          <div style={{ fontSize: '12px', color: '#4b5563', marginBottom: '8px', lineHeight: 1.5 }}>
+            {tooltip.node.sourceReferences?.[0]?.contextSnippet?.substring(0, 100) || 'No summary available.'}...
           </div>
-          <div style={{ display: 'flex', gap: 'var(--space-2)', fontSize: '12px', color: 'var(--text-disabled)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>
+          <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700 }}>
             <span style={{ color: getNodeColor(tooltip.node) }}>Trust: {Math.round(tooltip.node.trustScore * 100)}%</span>
             <span>{tooltip.node.sourceReferences?.[0]?.timestamp ? new Date(tooltip.node.sourceReferences[0].timestamp).toLocaleDateString() : ''}</span>
           </div>
         </div>
       )}
 
-      <button
-        onClick={handleResetView}
-        className="liquid-glass"
-        style={{
-          position: 'absolute', top: '114px', right: '16px', zIndex: 10,
-          padding: '6px 12px', color: 'var(--text-heading)', fontWeight: 600, fontSize: '11px',
-          cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.4)',
-          display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '6px'
+      {/* Minimap in top-right corner */}
+      <div 
+        style={{ 
+          position: 'absolute', 
+          width: '80px', 
+          height: '55px', 
+          top: '12px', 
+          right: '12px', 
+          border: '1px solid #d1fae5', 
+          background: '#f0fdf4',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          zIndex: 10
         }}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4 12H2"/><path d="M22 12h-2"/></svg>
+        <svg ref={minimapRef} style={{ width: '100%', height: '100%' }} />
+      </div>
+
+      {/* Recenter Nodes Button */}
+      <button
+        onClick={handleResetView}
+        style={{
+          position: 'absolute', 
+          top: '74px', 
+          right: '12px', 
+          zIndex: 10,
+          padding: '4px 8px', 
+          color: '#111827', 
+          fontWeight: 600, 
+          fontSize: '10px',
+          cursor: 'pointer', 
+          border: '1px solid #d1d5db', 
+          background: '#ffffff',
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '4px', 
+          borderRadius: '6px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+        }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
         Recenter Nodes
       </button>
-      {/* Minimap */}
-      <div className="liquid-glass p-1 rounded-[var(--radius-md)] z-10" style={{ position: 'absolute', width: '140px', height: '90px', top: '16px', right: '16px', border: '1px solid rgba(255, 255, 255, 0.1)', background: 'rgba(0,0,0,0.4)' }}>
-        <svg ref={minimapRef} style={{ width: '100%', height: '100%', borderRadius: '4px', overflow: 'hidden' }} />
-      </div>
     </div>
   );
 }
