@@ -116,15 +116,35 @@ body {
   color: var(--text-body);
 }
 
-/* Graph Specifics */
-.graph-dimmed {
-  opacity: 0.2 !important;
-  transition: opacity 0.3s ease !important;
+/* Graph Specifics - All nodes remain clearly visible at all times */
+.graph-node {
+  opacity: 1 !important;
+  transition: transform 0.2s ease, filter 0.2s ease !important;
 }
 
 .graph-focus {
   opacity: 1 !important;
-  transition: opacity 0.3s ease !important;
+}
+
+.graph-dimmed {
+  /* Keep all nodes visible and readable */
+  opacity: 0.95 !important;
+}
+
+.graph-search-dimmed {
+  opacity: 0.45 !important;
+}
+
+/* Highlight the active selected node */
+.graph-selected .main-circle {
+  stroke: #15803d !important;
+  stroke-width: 3.5px !important;
+  filter: drop-shadow(0 0 10px rgba(21, 128, 61, 0.7)) !important;
+}
+
+.graph-selected .node-label {
+  font-weight: 800 !important;
+  fill: #064e3b !important;
 }
 
 /* KaTeX Overrides */

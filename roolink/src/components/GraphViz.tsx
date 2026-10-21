@@ -160,10 +160,12 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
       blurFilter.append('feGaussianBlur').attr('stdDeviation', '14');
 
       const simulation = d3.forceSimulation()
-        .force('link', d3.forceLink().id((d: any) => d.id).distance(180).strength(0.6))
-        .force('charge', d3.forceManyBody().strength(-800).distanceMax(1000))
+        .force('link', d3.forceLink().id((d: any) => d.id).distance(160).strength(0.6))
+        .force('charge', d3.forceManyBody().strength(-450).distanceMax(800))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collide', d3.forceCollide().radius((d: any) => d.radius + 50).iterations(4))
+        .force('x', d3.forceX(width / 2).strength(0.06))
+        .force('y', d3.forceY(height / 2).strength(0.06))
+        .force('collide', d3.forceCollide().radius((d: any) => d.radius + 40).iterations(3))
         .on('tick', () => {
           if (graphRefs.current.linkGroup && graphRefs.current.pulseGroup) {
             const linkPath = (d: any) => {
@@ -470,13 +472,16 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
     nodeGroup.selectAll('.graph-node').attr('class', (d: any) => {
       let classes = 'graph-node';
       if (selectedNodeId) {
-        if (focusNodes.has(d.id)) classes += ' graph-focus';
-        else classes += ' graph-dimmed';
+        if (d.id === selectedNodeId) {
+          classes += ' graph-selected graph-focus';
+        } else if (focusNodes.has(d.id)) {
+          classes += ' graph-connected graph-focus';
+        } else {
+          classes += ' graph-visible';
+        }
       }
       if (searchQuery && !d.canonicalName?.toLowerCase().includes(searchQuery.toLowerCase())) {
-         classes += ' graph-dimmed';
-      } else if (searchQuery) {
-         classes += ' graph-focus';
+         classes += ' graph-search-dimmed';
       }
       return classes;
     });
@@ -485,7 +490,9 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
       let classes = 'edge-path';
       const sourceId = typeof d.source === 'string' ? d.source : d.source.id;
       const targetId = typeof d.target === 'string' ? d.target : d.target.id;
-      if (selectedNodeId && !focusLinks.has(`${sourceId}-${targetId}`)) classes += ' graph-dimmed';
+      if (selectedNodeId && focusLinks.has(`${sourceId}-${targetId}`)) {
+        classes += ' edge-highlighted';
+      }
       return classes;
     });
 
@@ -493,7 +500,9 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
       let classes = 'edge-pulse edge-flow';
       const sourceId = typeof d.source === 'string' ? d.source : d.source.id;
       const targetId = typeof d.target === 'string' ? d.target : d.target.id;
-      if (selectedNodeId && !focusLinks.has(`${sourceId}-${targetId}`)) classes += ' graph-dimmed';
+      if (selectedNodeId && focusLinks.has(`${sourceId}-${targetId}`)) {
+        classes += ' edge-highlighted';
+      }
       return classes;
     });
 
