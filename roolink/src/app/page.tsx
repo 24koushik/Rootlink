@@ -257,6 +257,8 @@ export default function Dashboard() {
   const canonicalSummary = selectedNode ? normalizeStructuredSummary(selectedNode) : { overview: "", sections: [], keyTakeaways: [] };
   const [activeTab, setActiveTab] = useState<'summary' | 'mindmap' | 'sources'>('summary');
   const [isGeneratingMindMap, setIsGeneratingMindMap] = useState(false);
+  const [linkedSummary, setLinkedSummary] = useState<string | null>(null);
+  const [isLoadingLinkedSummary, setIsLoadingLinkedSummary] = useState(false);
   const [mindMapError, setMindMapError] = useState<string | null>(null);
   const [linkSource, setLinkSource] = useState('');
   const [linkTarget, setLinkTarget] = useState('');
@@ -370,10 +372,49 @@ export default function Dashboard() {
     setGraphMode('expanded');
   };
 
+  const fetchLinkedSummary = useCallback(async (node: TrustNode) => {
+    const connectedEdges = edges.filter(e => e.sourceId === node.id || e.targetId === node.id);
+    if (connectedEdges.length === 0) {
+      setLinkedSummary(null);
+      setIsLoadingLinkedSummary(false);
+      return;
+    }
+
+    setIsLoadingLinkedSummary(true);
+    try {
+      const res = await fetch('/api/oversummary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          nodeId: node.id, 
+          clientNodes: nodes, 
+          clientEdges: edges 
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLinkedSummary(data.overSummary || data.overview || null);
+      }
+    } catch (e) {
+      console.error("Failed to fetch linked summary:", e);
+    } finally {
+      setIsLoadingLinkedSummary(false);
+    }
+  }, [nodes, edges]);
+
+  useEffect(() => {
+    if (selectedNode) {
+      fetchLinkedSummary(selectedNode);
+    } else {
+      setLinkedSummary(null);
+    }
+  }, [selectedNode?.id, edges.length, fetchLinkedSummary]);
+
   const handleNodeSelect = async (node: TrustNode) => {
     setSelectedNode(node);
     setSelectedEdge(null);
     setActiveTab('summary');
+    setLinkedSummary(null);
   };
 
   const handleLinkNodes = async (e?: React.FormEvent) => {
@@ -859,6 +900,148 @@ export default function Dashboard() {
                       </div>
                     </div>
                   )}
+
+
+                  {/* CONNECTIONS LIST */}
+                  <div style={{ marginTop: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <h3 style={{ fontSize: '11px', fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <LinkIcon size={12} /> CONNECTIONS
+                      </h3>
+                      <button
+                        onClick={() => {
+                          setLinkSource(selectedNode.id);
+                          setLinkTarget('');
+                          setIsLinkingModalOpen(true);
+                        }}
+                        style={{
+                          background: '#f0fdf4',
+                          border: '1px solid #bbf7d0',
+                          color: '#15803d',
+                          borderRadius: '6px',
+                          padding: '3px 8px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        + Connect
+                      </button>
+                    </div>
+                    {(() => {
+                      const connections = edges
+                        .filter(e => e.sourceId === selectedNode.id || e.targetId === selectedNode.id)
+                        .map(e => {
+                          const isOutgoing = e.sourceId === selectedNode.id;
+                          const targetId = isOutgoing ? e.targetId : e.sourceId;
+                          return { targetId, node: nodes.find(n => n.id === targetId), isOutgoing, edgeId: e.id, sourceId: e.sourceId, realTargetId: e.targetId };
+                        })
+                        .filter(c => c.node);
+                      
+                      if (connections.length === 0) {
+                        return <div style={{ fontSize: '13px', color: '#6b7280', fontStyle: 'italic' }}>No connections yet. Click "+ Connect" to link with other nodes.</div>;
+                      }
+
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {connections.map(c => (
+                            <div key={c.edgeId} className="card-shell" style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '13px', color: '#1f2937' }}>
+                                <Shield size={12} color="#15803d" />
+                                <span style={{ fontWeight: 500 }}>{c.node?.canonicalName}</span>
+                              </div>
+                              <button 
+                                onClick={() => handleUnlinkNode(c.sourceId, c.realTargetId)}
+                                disabled={unlinkingId === `${c.sourceId}-${c.realTargetId}`}
+                                style={{ background: 'transparent', border: 'none', color: '#dc2626', cursor: 'pointer', padding: 4 }}
+                                title="Remove Link"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* TOTAL LINKED SYSTEM SUMMARY CARD (Bottom of Summary Tab) */}
+                  {(() => {
+                    const nodeConnections = edges.filter(e => e.sourceId === selectedNode.id || e.targetId === selectedNode.id);
+                    return (
+                      <div style={{ marginTop: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <h3 style={{
+                            fontSize: '11px', fontWeight: 800, color: '#166534',
+                            textTransform: 'uppercase', letterSpacing: '0.05em',
+                            display: 'flex', alignItems: 'center', gap: 6
+                          }}>
+                            <Network size={14} color="#15803d" /> LINKED KNOWLEDGE SUMMARY
+                            {nodeConnections.length > 0 && (
+                              <span style={{ fontSize: '10px', background: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                                {nodeConnections.length} Active {nodeConnections.length === 1 ? 'Link' : 'Links'}
+                              </span>
+                            )}
+                          </h3>
+                          {nodeConnections.length > 0 && (
+                            <button
+                              onClick={() => fetchLinkedSummary(selectedNode)}
+                              disabled={isLoadingLinkedSummary}
+                              style={{
+                                background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d',
+                                borderRadius: '6px', padding: '3px 8px', fontSize: '11px', fontWeight: 700,
+                                cursor: isLoadingLinkedSummary ? 'not-allowed' : 'pointer',
+                                display: 'flex', alignItems: 'center', gap: '4px'
+                              }}
+                            >
+                              <RefreshCw size={11} className={isLoadingLinkedSummary ? 'animate-spin' : ''} />
+                              {isLoadingLinkedSummary ? 'Synthesizing...' : 'Regenerate'}
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="card-shell" style={{
+                          padding: '18px 20px',
+                          background: '#f0fdf4',
+                          border: '1.5px solid #86efac',
+                          boxShadow: '0 4px 12px rgba(21, 128, 61, 0.08)'
+                        }}>
+                          {isLoadingLinkedSummary ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#15803d', fontSize: '13px', padding: '12px 0', fontWeight: 600 }}>
+                              <RefreshCw size={16} className="animate-spin" /> Synthesizing total linked knowledge across connected nodes...
+                            </div>
+                          ) : nodeConnections.length === 0 ? (
+                            <div style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6 }}>
+                              <p style={{ marginBottom: '8px' }}>No links established for <strong>{selectedNode.canonicalName}</strong> yet.</p>
+                              <button
+                                onClick={() => {
+                                  setLinkSource(selectedNode.id);
+                                  setLinkTarget('');
+                                  setIsLinkingModalOpen(true);
+                                }}
+                                style={{
+                                  background: '#15803d', color: '#ffffff', border: 'none',
+                                  borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 700,
+                                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px'
+                                }}
+                              >
+                                <LinkIcon size={12} /> Establish Link to Generate Linked Summary
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '13px', color: '#14532d', lineHeight: 1.7 }}>
+                              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                                {linkedSummary || 'Synthesizing interconnected concepts across links...'}
+                              </ReactMarkdown>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                 </div>
               )}
