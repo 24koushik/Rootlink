@@ -368,8 +368,11 @@ export default function Dashboard() {
 
   const handleEdgeSelect = (edge: TrustEdge) => {
     setSelectedEdge(edge);
-    setSelectedNode(null);
-    setGraphMode('expanded');
+    const sNode = nodes.find(n => n.id === edge.sourceId) || nodes.find(n => n.id === edge.targetId);
+    if (sNode) {
+      setSelectedNode(sNode);
+      setActiveTab('summary');
+    }
   };
 
   const fetchLinkedSummary = useCallback(async (node: TrustNode) => {
@@ -956,10 +959,23 @@ export default function Dashboard() {
                               <button 
                                 onClick={() => handleUnlinkNode(c.sourceId, c.realTargetId)}
                                 disabled={unlinkingId === `${c.sourceId}-${c.realTargetId}`}
-                                style={{ background: 'transparent', border: 'none', color: '#dc2626', cursor: 'pointer', padding: 4 }}
-                                title="Remove Link"
+                                style={{ 
+                                  background: '#fee2e2', 
+                                  border: '1px solid #fecaca', 
+                                  color: '#dc2626', 
+                                  cursor: 'pointer', 
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                title="Detach this link"
                               >
-                                <Trash2 size={14} />
+                                <Trash2 size={12} /> Detach
                               </button>
                             </div>
                           ))}
@@ -1310,7 +1326,7 @@ export default function Dashboard() {
               </div>
             </div>
           ) : (
-            <GraphViz nodes={nodes} edges={edges} onNodeSelect={handleNodeSelect} onEdgeSelect={handleEdgeSelect} selectedNodeId={selectedNode?.id} searchQuery={searchQuery} />
+            <GraphViz nodes={nodes} edges={edges} onNodeSelect={handleNodeSelect} onEdgeSelect={handleEdgeSelect} onUnlink={handleUnlinkNode} selectedNodeId={selectedNode?.id} searchQuery={searchQuery} />
           )}
         </div>
 

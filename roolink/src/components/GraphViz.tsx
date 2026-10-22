@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
+import { Trash2 } from 'lucide-react';
 import { TrustNode, TrustEdge } from '@/lib/graph';
 
 interface GraphVizProps {
@@ -9,6 +10,7 @@ interface GraphVizProps {
   edges?: TrustEdge[];
   onNodeSelect: (node: TrustNode) => void;
   onEdgeSelect?: (edge: TrustEdge) => void;
+  onUnlink?: (sourceId: string, targetId: string) => void;
   selectedNodeId?: string | null;
   searchQuery?: string;
 }
@@ -44,16 +46,20 @@ function truncateLabel(title: string, maxLen: number = 22): string {
   return title.substring(0, maxLen) + '…';
 }
 
-export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNodeSelect, onEdgeSelect, selectedNodeId, searchQuery = '' }: GraphVizProps) {
+export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNodeSelect, onEdgeSelect, onUnlink, selectedNodeId, searchQuery = '' }: GraphVizProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const minimapRef = useRef<SVGSVGElement>(null);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
+  const [activeEdgePopup, setActiveEdgePopup] = useState<{ edge: TrustEdge; x: number; y: number } | null>(null);
 
-  const callbacksRef = useRef({ onNodeSelect, onEdgeSelect, setTooltip });
+  const callbacksRef = useRef({ onNodeSelect, onEdgeSelect, onUnlink, setTooltip, setActiveEdgePopup });
   useEffect(() => {
     callbacksRef.current.onNodeSelect = onNodeSelect;
+    callbacksRef.current.onEdgeSelect = onEdgeSelect;
+    callbacksRef.current.onUnlink = onUnlink;
     callbacksRef.current.setTooltip = setTooltip;
-  }, [onNodeSelect, setTooltip]);
+    callbacksRef.current.setActiveEdgePopup = setActiveEdgePopup;
+  }, [onNodeSelect, onEdgeSelect, onUnlink, setTooltip, setActiveEdgePopup]);
 
   const { links, incomingCounts, outgoingCounts } = useMemo(() => {
     const edgeList = rawEdges.map(e => ({ ...e, source: e.sourceId, target: e.targetId }));
@@ -105,21 +111,45 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
         .attr('width', width)
         .attr('height', height)
         .style('background', 'transparent')
-        .on('click', () => callbacksRef.current.setTooltip(null));
+        .on('click', () => { callbacksRef.current.setTooltip(null); callbacksRef.current.setActiveEdgePopup(null); });
 
       const defs = svg.append('defs');
       
       defs.append('marker')
         .attr('id', 'arrow-default')
         .attr('viewBox', '0 -5 10 10')
-        .attr('refX', 38)
+        .attr('refX', 7)
         .attr('refY', 0)
-        .attr('markerWidth', 6)
-        .attr('markerHeight', 6)
+        .attr('markerWidth', 7)
+        .attr('markerHeight', 7)
         .attr('orient', 'auto')
         .append('path')
-        .attr('d', 'M0,-4L8,0L0,4')
-        .attr('fill', 'rgba(16, 185, 129, 0.4)');
+        .attr('d', 'M0,-3.5L7,0L0,3.5Z')
+        .attr('fill', '#15803d');
+
+      defs.append('marker')
+        .attr('id', 'arrow-ai')
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 7)
+        .attr('refY', 0)
+        .attr('markerWidth', 6.5)
+        .attr('markerHeight', 6.5)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,-3L6,0L0,3Z')
+        .attr('fill', '#10b981');
+
+      defs.append('marker')
+        .attr('id', 'arrow-highlighted')
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 7)
+        .attr('refY', 0)
+        .attr('markerWidth', 8)
+        .attr('markerHeight', 8)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,-4L8,0L0,4Z')
+        .attr('fill', '#166534');
 
       // Grid Pattern (Soft Mint Lines)
       const pattern = defs.append('pattern').attr('id', 'radar-grid').attr('width', 60).attr('height', 60).attr('patternUnits', 'userSpaceOnUse');
@@ -168,26 +198,48 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
         .force('collide', d3.forceCollide().radius((d: any) => d.radius + 40).iterations(3))
         .on('tick', () => {
           if (graphRefs.current.linkGroup && graphRefs.current.pulseGroup) {
-            const linkPath = (d: any) => {
-              if (d.source.x === undefined || d.target.x === undefined) return '';
-              const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y, dr = Math.sqrt(dx * dx + dy * dy) * 1.2;
-              return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
+            const getLinkCoords = (d: any) => {
+              if (!d.source || !d.target || d.source.x === undefined || d.target.x === undefined) return null;
+              const dx = d.target.x - d.source.x;
+              const dy = d.target.y - d.source.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist === 0) return null;
+
+              const sRadius = d.source.radius || 22;
+              const tRadius = (d.target.radius || 22) + 7;
+
+              const ux = dx / dist;
+              const uy = dy / dist;
+
+              const x1 = d.source.x + ux * sRadius;
+              const y1 = d.source.y + uy * sRadius;
+              const x2 = d.target.x - ux * tRadius;
+              const y2 = d.target.y - uy * tRadius;
+
+              return {
+                path: `M${x1},${y1}L${x2},${y2}`,
+                midX: (x1 + x2) / 2,
+                midY: (y1 + y2) / 2
+              };
             };
-            graphRefs.current.linkGroup.selectAll('path').attr('d', linkPath);
-            graphRefs.current.pulseGroup.selectAll('path').attr('d', linkPath);
-            
-            // Calculate label coordinates based on bezier curve
-            graphRefs.current.linkGroup.selectAll('text.edge-label')
-              .attr('x', (d: any) => {
-                 if (d.source.x === undefined || d.target.x === undefined) return 0;
-                 const dx = d.target.x - d.source.x;
-                 return d.source.x + dx / 2;
-              })
-              .attr('y', (d: any) => {
-                 if (d.source.y === undefined || d.target.y === undefined) return 0;
-                 const dx = d.target.x - d.source.x;
-                 const dy = d.target.y - d.source.y;
-                 return d.source.y + dy / 2 - 10;
+
+            graphRefs.current.linkGroup.selectAll('path.edge-path')
+              .attr('d', (d: any) => {
+                const c = getLinkCoords(d);
+                return c ? c.path : '';
+              });
+
+            graphRefs.current.pulseGroup.selectAll('path')
+              .attr('d', (d: any) => {
+                const c = getLinkCoords(d);
+                return c ? c.path : '';
+              });
+
+            graphRefs.current.linkGroup.selectAll('.edge-label-group')
+              .attr('transform', (d: any) => {
+                const c = getLinkCoords(d);
+                if (!c) return 'translate(0,0)';
+                return `translate(${c.midX},${c.midY})`;
               });
           }
           if (graphRefs.current.nodeGroup) {
@@ -283,28 +335,69 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
     });
 
     // Update Links
-    linkGroup!.selectAll('path')
+    linkGroup!.selectAll('path.edge-path')
       .data(validLinks, (d: any) => (d as any).id)
       .join('path')
       .attr('class', 'edge-path')
       .style('cursor', 'pointer')
-      .on('click', (event, d) => { event.stopPropagation(); if(callbacksRef.current.onEdgeSelect) callbacksRef.current.onEdgeSelect(d as unknown as TrustEdge); })
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        const [mx, my] = d3.pointer(event, containerRef.current);
+        callbacksRef.current.setActiveEdgePopup({ edge: d as unknown as TrustEdge, x: mx, y: my });
+        if(callbacksRef.current.onEdgeSelect) callbacksRef.current.onEdgeSelect(d as unknown as TrustEdge);
+      })
       .attr('fill', 'none')
-      .attr('stroke', (d: any) => (d as any).origin === 'automatic' ? 'rgba(16, 185, 129, 0.35)' : (d as any).origin === 'manual' ? 'rgba(21, 128, 61, 0.7)' : 'rgba(148, 163, 184, 0.4)')
-      .attr('stroke-width', (d: any) => (d as any).origin === 'manual' ? 2.5 : 1.5)
+      .attr('stroke', (d: any) => (d as any).origin === 'automatic' ? 'rgba(16, 185, 129, 0.45)' : '#15803d')
+      .attr('stroke-width', (d: any) => (d as any).origin === 'manual' ? 2.5 : 1.8)
       .attr('stroke-dasharray', (d: any) => (d as any).origin === 'automatic' ? '4,4' : 'none')
-      .attr('marker-end', 'url(#arrow-default)');
+      .attr('marker-end', (d: any) => (d as any).origin === 'automatic' ? 'url(#arrow-ai)' : 'url(#arrow-default)');
       
-    // Add Labels for Links
-    linkGroup!.selectAll('text.edge-label')
+    // Add Clickable Badges for Links
+    const labelGroup = linkGroup!.selectAll('.edge-label-group')
       .data(validLinks, (d: any) => `label-${(d as any).id}`)
-      .join('text')
-      .attr('class', 'edge-label')
-      .attr('fill', (d: any) => (d as any).origin === 'automatic' ? '#059669' : '#15803d')
-      .attr('font-size', '10px')
-      .attr('font-weight', 'bold')
-      .attr('text-anchor', 'middle')
-      .text((d: any) => (d as any).origin === 'automatic' ? 'AI' : (d as any).origin === 'manual' ? 'MANUAL' : '');
+      .join(
+        enter => {
+          const g = enter.append('g')
+            .attr('class', 'edge-label-group')
+            .style('cursor', 'pointer')
+            .on('click', (event, d) => {
+              event.stopPropagation();
+              const [mx, my] = d3.pointer(event, containerRef.current);
+              callbacksRef.current.setActiveEdgePopup({ edge: d as unknown as TrustEdge, x: mx, y: my });
+              if(callbacksRef.current.onEdgeSelect) callbacksRef.current.onEdgeSelect(d as unknown as TrustEdge);
+            });
+
+          g.append('rect')
+            .attr('class', 'edge-label-bg')
+            .attr('rx', 4)
+            .attr('ry', 4)
+            .attr('y', -8)
+            .attr('height', 16)
+            .attr('fill', '#ffffff')
+            .attr('stroke', '#86efac')
+            .attr('stroke-width', 1)
+            .attr('filter', 'drop-shadow(0 1px 2px rgba(0,0,0,0.06))');
+
+          g.append('text')
+            .attr('class', 'edge-label')
+            .attr('y', 3.5)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '9px')
+            .attr('font-weight', '700')
+            .attr('letter-spacing', '0.04em')
+            .attr('fill', '#15803d');
+
+          return g;
+        }
+      );
+
+    labelGroup.select('text')
+      .text((d: any) => (d as any).origin === 'automatic' ? 'AI' : 'MANUAL')
+      .attr('fill', (d: any) => (d as any).origin === 'automatic' ? '#059669' : '#15803d');
+
+    labelGroup.select('rect')
+      .attr('x', (d: any) => (d as any).origin === 'automatic' ? -12 : -26)
+      .attr('width', (d: any) => (d as any).origin === 'automatic' ? 24 : 52);
 
     pulseGroup!.selectAll('path')
       .data(validLinks, (d: any) => `pulse-${(d as any).id}`)
@@ -541,6 +634,89 @@ export default function GraphViz({ nodes: rawNodes, edges: rawEdges = [], onNode
           </div>
         </div>
       )}
+
+      {/* Floating Edge Detach Action Popover */}
+      {activeEdgePopup && (() => {
+        const sNode = rawNodes.find(n => n.id === activeEdgePopup.edge.sourceId);
+        const tNode = rawNodes.find(n => n.id === activeEdgePopup.edge.targetId);
+        return (
+          <div 
+            style={{
+              position: 'absolute',
+              left: Math.max(120, Math.min(activeEdgePopup.x, (containerRef.current?.clientWidth || 500) - 120)),
+              top: Math.max(40, activeEdgePopup.y - 14),
+              transform: 'translate(-50%, -100%)',
+              background: '#ffffff',
+              border: '1.5px solid #86efac',
+              borderRadius: '10px',
+              padding: '10px 14px',
+              boxShadow: '0 12px 28px rgba(0, 40, 20, 0.16)',
+              zIndex: 1000,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              whiteSpace: 'nowrap'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: '10px', fontWeight: 800, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {activeEdgePopup.edge.origin === 'automatic' ? 'AI Link' : 'Manual Link'}
+              </div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f2d24', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>{sNode?.canonicalName || 'Source'}</span>
+                <span style={{ color: '#15803d' }}>➔</span>
+                <span>{tNode?.canonicalName || 'Target'}</span>
+              </div>
+            </div>
+            
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (callbacksRef.current.onUnlink) {
+                  callbacksRef.current.onUnlink(activeEdgePopup.edge.sourceId, activeEdgePopup.edge.targetId);
+                }
+                setActiveEdgePopup(null);
+              }}
+              style={{
+                background: '#fee2e2',
+                border: '1px solid #fca5a5',
+                color: '#dc2626',
+                borderRadius: '6px',
+                padding: '5px 10px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                transition: 'all 0.15s ease'
+              }}
+              title="Detach this link"
+            >
+              <Trash2 size={12} /> Detach Link
+            </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveEdgePopup(null);
+              }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#9ca3af',
+                cursor: 'pointer',
+                padding: '2px',
+                fontSize: '14px',
+                lineHeight: 1
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Minimap in top-right corner */}
       <div 
