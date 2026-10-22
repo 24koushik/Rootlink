@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import MindMapViz from '@/components/MindMapViz';
 import { normalizeMindMap } from '@/lib/mindmap';
 import GraphViz from '@/components/GraphViz';
@@ -259,6 +259,12 @@ export default function Dashboard() {
   const [isGeneratingMindMap, setIsGeneratingMindMap] = useState(false);
   const [linkedSummary, setLinkedSummary] = useState<string | null>(null);
   const [isLoadingLinkedSummary, setIsLoadingLinkedSummary] = useState(false);
+  const linkedSummaryCache = useRef<Record<string, { summary: string; edgeSig: string }>>({});
+  const activeFetchReqId = useRef<number>(0);
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+  useEffect(() => { edgesRef.current = edges; }, [edges]);
   const [mindMapError, setMindMapError] = useState<string | null>(null);
   const [linkSource, setLinkSource] = useState('');
   const [linkTarget, setLinkTarget] = useState('');
@@ -324,6 +330,13 @@ export default function Dashboard() {
       // Merge nodes safely - never drop nodes that the client already has!
       setRawNodes(prev => {
         if (normalizedNodes.length === 0) return prev;
+        if (prev.length === normalizedNodes.length) {
+          const isSame = prev.every((p, i) => {
+            const n = normalizedNodes[i];
+            return n && p.id === n.id && p.lastSeen === n.lastSeen && p.trustScore === n.trustScore && p.canonicalName === n.canonicalName;
+          });
+          if (isSame) return prev;
+        }
         const map = new Map(prev.map(n => [n.id, n]));
         for (const n of normalizedNodes) {
           map.set(n.id, { ...(map.get(n.id) || {}), ...n });
@@ -333,6 +346,13 @@ export default function Dashboard() {
 
       // Merge edges safely
       setRawEdges(prev => {
+        if (prev.length === normalizedEdges.length) {
+          const isSame = prev.every((p, i) => {
+            const e = normalizedEdges[i];
+            return e && p.id === e.id && p.sourceId === e.sourceId && p.targetId === e.targetId;
+          });
+          if (isSame) return prev;
+        }
         const map = new Map(prev.map(e => [e.id, e]));
         for (const e of normalizedEdges) {
           map.set(e.id, e);
@@ -366,23 +386,32 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleEdgeSelect = (edge: TrustEdge) => {
-    setSelectedEdge(edge);
-    const sNode = nodes.find(n => n.id === edge.sourceId) || nodes.find(n => n.id === edge.targetId);
-    if (sNode) {
-      setSelectedNode(sNode);
-      setActiveTab('summary');
-    }
-  };
+  const getConnectedSig = useCallback((nodeId: string, currentEdges: TrustEdge[]) => {
+    return currentEdges
+      .filter(e => e.sourceId === nodeId || e.targetId === nodeId)
+      .map(e => `${e.sourceId}->${e.targetId}`)
+      .sort()
+      .join('|');
+  }, []);
 
-  const fetchLinkedSummary = useCallback(async (node: TrustNode) => {
-    const connectedEdges = edges.filter(e => e.sourceId === node.id || e.targetId === node.id);
+  const fetchLinkedSummary = useCallback(async (node: TrustNode, force: boolean = false) => {
+    const currentEdges = edgesRef.current;
+    const connectedEdges = currentEdges.filter(e => e.sourceId === node.id || e.targetId === node.id);
     if (connectedEdges.length === 0) {
       setLinkedSummary(null);
       setIsLoadingLinkedSummary(false);
       return;
     }
 
+    const edgeSig = getConnectedSig(node.id, currentEdges);
+
+    if (!force && linkedSummaryCache.current[node.id]?.edgeSig === edgeSig) {
+      setLinkedSummary(linkedSummaryCache.current[node.id].summary);
+      setIsLoadingLinkedSummary(false);
+      return;
+    }
+
+    const reqId = ++activeFetchReqId.current;
     setIsLoadingLinkedSummary(true);
     try {
       const res = await fetch('/api/oversummary', {
@@ -390,34 +419,77 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           nodeId: node.id, 
-          clientNodes: nodes, 
-          clientEdges: edges 
+          clientNodes: nodesRef.current, 
+          clientEdges: currentEdges 
         }),
       });
       if (res.ok) {
         const data = await res.json();
-        setLinkedSummary(data.overSummary || data.overview || null);
+        const summaryText = data.overSummary || data.overview || null;
+        if (reqId === activeFetchReqId.current) {
+          if (summaryText) {
+            linkedSummaryCache.current[node.id] = { summary: summaryText, edgeSig };
+          }
+          setLinkedSummary(summaryText);
+        }
       }
     } catch (e) {
       console.error("Failed to fetch linked summary:", e);
     } finally {
-      setIsLoadingLinkedSummary(false);
+      if (reqId === activeFetchReqId.current) {
+        setIsLoadingLinkedSummary(false);
+      }
     }
-  }, [nodes, edges]);
+  }, [getConnectedSig]);
+
+  const selectedNodeId = selectedNode?.id;
+  const connectedEdgeSig = useMemo(() => {
+    if (!selectedNodeId) return '';
+    return getConnectedSig(selectedNodeId, edges);
+  }, [selectedNodeId, edges, getConnectedSig]);
 
   useEffect(() => {
-    if (selectedNode) {
-      fetchLinkedSummary(selectedNode);
-    } else {
+    if (!selectedNode) {
       setLinkedSummary(null);
+      setIsLoadingLinkedSummary(false);
+      return;
     }
-  }, [selectedNode?.id, edges.length, fetchLinkedSummary]);
+    const currentEdges = edgesRef.current;
+    const connectedEdges = currentEdges.filter(e => e.sourceId === selectedNode.id || e.targetId === selectedNode.id);
+    if (connectedEdges.length === 0) {
+      setLinkedSummary(null);
+      setIsLoadingLinkedSummary(false);
+      return;
+    }
+
+    const cached = linkedSummaryCache.current[selectedNode.id];
+    if (cached && cached.edgeSig === connectedEdgeSig) {
+      setLinkedSummary(cached.summary);
+      setIsLoadingLinkedSummary(false);
+    } else {
+      fetchLinkedSummary(selectedNode);
+    }
+  }, [selectedNodeId, connectedEdgeSig]);
 
   const handleNodeSelect = async (node: TrustNode) => {
     setSelectedNode(node);
     setSelectedEdge(null);
     setActiveTab('summary');
-    setLinkedSummary(null);
+    const sig = getConnectedSig(node.id, edgesRef.current);
+    const cached = linkedSummaryCache.current[node.id];
+    if (cached && cached.edgeSig === sig) {
+      setLinkedSummary(cached.summary);
+    } else {
+      setLinkedSummary(null);
+    }
+  };
+
+  const handleEdgeSelect = (edge: TrustEdge) => {
+    setSelectedEdge(edge);
+    const sNode = nodes.find(n => n.id === edge.sourceId) || nodes.find(n => n.id === edge.targetId);
+    if (sNode) {
+      handleNodeSelect(sNode);
+    }
   };
 
   const handleLinkNodes = async (e?: React.FormEvent) => {
@@ -482,6 +554,8 @@ export default function Dashboard() {
           return Array.from(map.values());
         });
 
+        delete linkedSummaryCache.current[linkSource];
+        delete linkedSummaryCache.current[linkTarget];
         setLinkSource('');
         setLinkTarget('');
         setIsLinkingModalOpen(false);
@@ -533,6 +607,9 @@ export default function Dashboard() {
   const handleUnlinkNode = async (sourceId: string, targetId: string) => {
     const unlinkKey = `${sourceId}-${targetId}`;
     setUnlinkingId(unlinkKey);
+
+    delete linkedSummaryCache.current[sourceId];
+    delete linkedSummaryCache.current[targetId];
 
     // Optimistically remove link immediately
     setRawEdges(prev => prev.filter(e => 
@@ -1004,7 +1081,7 @@ export default function Dashboard() {
                           </h3>
                           {nodeConnections.length > 0 && (
                             <button
-                              onClick={() => fetchLinkedSummary(selectedNode)}
+                              onClick={() => fetchLinkedSummary(selectedNode, true)}
                               disabled={isLoadingLinkedSummary}
                               style={{
                                 background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d',
@@ -1025,11 +1102,7 @@ export default function Dashboard() {
                           border: '1.5px solid #86efac',
                           boxShadow: '0 4px 12px rgba(21, 128, 61, 0.08)'
                         }}>
-                          {isLoadingLinkedSummary ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#15803d', fontSize: '13px', padding: '12px 0', fontWeight: 600 }}>
-                              <RefreshCw size={16} className="animate-spin" /> Synthesizing total linked knowledge across connected nodes...
-                            </div>
-                          ) : nodeConnections.length === 0 ? (
+                          {nodeConnections.length === 0 ? (
                             <div style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6 }}>
                               <p style={{ marginBottom: '8px' }}>No links established for <strong>{selectedNode.canonicalName}</strong> yet.</p>
                               <button
@@ -1047,8 +1120,28 @@ export default function Dashboard() {
                                 <LinkIcon size={12} /> Establish Link to Generate Linked Summary
                               </button>
                             </div>
+                          ) : isLoadingLinkedSummary && !linkedSummary ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#15803d', fontSize: '13px', padding: '16px 0', fontWeight: 600 }}>
+                              <RefreshCw size={16} className="animate-spin" /> Synthesizing total linked knowledge across connected nodes...
+                            </div>
                           ) : (
-                            <div style={{ fontSize: '13px', color: '#14532d', lineHeight: 1.7 }}>
+                            <div style={{ fontSize: '13px', color: '#14532d', lineHeight: 1.7, position: 'relative' }}>
+                              {isLoadingLinkedSummary && (
+                                <div style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  marginBottom: '10px',
+                                  background: '#dcfce7',
+                                  color: '#15803d',
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: 700
+                                }}>
+                                  <RefreshCw size={11} className="animate-spin" /> Updating synthesis...
+                                </div>
+                              )}
                               <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
                                 {linkedSummary || 'Synthesizing interconnected concepts across links...'}
                               </ReactMarkdown>
