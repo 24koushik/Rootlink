@@ -21,7 +21,7 @@ export async function DELETE(request: Request) {
     if (!id) {
       return NextResponse.json({ error: 'Missing node ID' }, { status: 400 });
     }
-    globalGraph.deleteNode(id);
+    await globalGraph.deleteNode(id);
     return NextResponse.json(globalGraph.getGraphData());
   } catch (error: any) {
     console.error("API /nodes DELETE Error:", error);
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
     const expectedId = pageSubject.videoId ? `yt-${pageSubject.videoId}` : (pageSubject.sourceUrl ? new URL(pageSubject.sourceUrl).hostname + new URL(pageSubject.sourceUrl).pathname : title).replace(/^www\./, '').replace(/\/$/, '').toLowerCase();
     
     // Actually, just let addScrapedDataToGraph run and we will explicitly find it by the deterministic ID logic
-    const graphData = globalGraph.addScrapedDataToGraph(pageSubject, []);
+    const graphData = await globalGraph.addScrapedDataToGraph(pageSubject, []);
     
     // Re-import the ID logic to perfectly match
     const { generateDeterministicId } = require('@/lib/graph');
@@ -161,18 +161,18 @@ export async function POST(request: Request) {
         createdNode.processingStatus = 'completed';
         if (isYouTube && res.keyMoments) createdNode.keyMoments = res.keyMoments;
         
-        globalGraph.updateNode(createdNode.id, createdNode);
-        globalGraph.recalculateAutomaticLinks();
+        await globalGraph.updateNode(createdNode.id, createdNode);
+        await globalGraph.recalculateAutomaticLinks();
       } else {
         createdNode.processingStatus = 'failed';
-        globalGraph.updateNode(createdNode.id, createdNode);
-        globalGraph.recalculateAutomaticLinks();
+        await globalGraph.updateNode(createdNode.id, createdNode);
+        await globalGraph.recalculateAutomaticLinks();
       }
     } catch (err) {
       console.error('[AI] Processing failed:', err);
       createdNode.processingStatus = 'failed';
-      globalGraph.updateNode(createdNode.id, createdNode);
-        globalGraph.recalculateAutomaticLinks();
+      await globalGraph.updateNode(createdNode.id, createdNode);
+        await globalGraph.recalculateAutomaticLinks();
     }
 
     return NextResponse.json({ 

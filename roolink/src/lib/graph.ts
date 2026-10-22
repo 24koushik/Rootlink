@@ -262,15 +262,19 @@ class ProvenanceGraph {
         suppressedLinks: Array.from(this.suppressedLinks)
       };
 
-      // 1. Always save locally as a backup
+      // 1. Always save locally to /tmp for Vercel serverless and to cwd for local dev
       try {
-        const dbPath = process.env.VERCEL ? path.join('/tmp', 'database.json') : path.join(process.cwd(), 'database.json');
-        fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf-8');
-      } catch (e) { console.log('Local save skipped (read-only FS)'); }
+        const tmpPath = path.join('/tmp', 'database.json');
+        fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+      } catch (e) { /* ignore */ }
+
+      try {
+        const cwdPath = path.join(process.cwd(), 'database.json');
+        fs.writeFileSync(cwdPath, JSON.stringify(data, null, 2), 'utf-8');
+      } catch (e) { /* ignore read-only FS */ }
 
       // 2. If Vercel Postgres is connected, save to cloud
       if (process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.STORAGE_URL) {
-        // Ensure table exists (fire and forget)
         await sql`
           CREATE TABLE IF NOT EXISTS graph_state (
             id INTEGER PRIMARY KEY,
@@ -278,7 +282,6 @@ class ProvenanceGraph {
           )
         `;
         
-        // Upsert state
         await sql`
           INSERT INTO graph_state (id, state)
           VALUES (1, ${JSON.stringify(data)}::jsonb)
@@ -292,7 +295,7 @@ class ProvenanceGraph {
 
   private _isLoaded = false;
   public async ensureLoaded() {
-    if (this._isLoaded) return;
+    if (this._isLoaded && this.nodes.length > 0) return;
     await this.loadState();
     this._isLoaded = true;
   }
@@ -301,7 +304,7 @@ class ProvenanceGraph {
     try {
       if (typeof window !== 'undefined') return;
       
-      let loadedData: any = null;
+      let loadedData = null;
 
       // 1. Try Vercel Postgres first
       if (process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.STORAGE_URL) {
@@ -322,13 +325,26 @@ class ProvenanceGraph {
         }
       }
 
-      // 2. Fallback to Local JSON
+      // 2. Fallback to Local JSON (/tmp first, then bundled repo database.json)
       if (!loadedData) {
-        const dbPath = process.env.VERCEL ? path.join('/tmp', 'database.json') : path.join(process.cwd(), 'database.json');
-        if (fs.existsSync(dbPath)) {
-          const raw = fs.readFileSync(dbPath, 'utf-8');
-          loadedData = JSON.parse(raw);
-          console.log("[KNOWLEDGE GRAPH] Loaded from local database.json!");
+        const tmpPath = path.join('/tmp', 'database.json');
+        const cwdPath = path.join(process.cwd(), 'database.json');
+        
+        let pathRead = null;
+        if (fs.existsSync(tmpPath)) {
+          pathRead = tmpPath;
+        } else if (fs.existsSync(cwdPath)) {
+          pathRead = cwdPath;
+        }
+
+        if (pathRead) {
+          try {
+            const raw = fs.readFileSync(pathRead, 'utf-8');
+            loadedData = JSON.parse(raw);
+            console.log("[KNOWLEDGE GRAPH] Loaded from " + pathRead);
+          } catch (err) {
+            console.error("Error reading JSON db:", err);
+          }
         }
       }
 
@@ -352,24 +368,24 @@ class ProvenanceGraph {
     return a < b ? `${a}:${b}` : `${b}:${a}`;
   }
 
-  addScrapedDataToGraph(pageSubject: Partial<TrustNode>, extractedEntities: Partial<TrustNode>[]): { nodes: TrustNode[], edges: TrustEdge[] } {
+  async addScrapedDataToGraph(pageSubject: Partial<TrustNode>, extractedEntities: Partial<TrustNode>[]): Promise<{ nodes: TrustNode[], edges: TrustEdge[] }> {
     const pageSubjectId = generateDeterministicId(pageSubject.canonicalName || '', pageSubject.sourceUrl, pageSubject.videoId);
     const allEntities = [pageSubject, ...extractedEntities];
     this.nodes = processIncomingEntities(allEntities, this.nodes);
     this.edges = generateEdgesFromPage(pageSubjectId, extractedEntities, this.edges);
-    this.saveState();
+    await this.saveState();
     return { nodes: this.nodes, edges: this.edges };
   }
 
-  updateNode(id: string, updatedFields: Partial<TrustNode>) {
+  async updateNode(id: string, updatedFields: Partial<TrustNode>): Promise<void> {
     const idx = this.nodes.findIndex(n => n.id === id);
     if (idx >= 0) {
       this.nodes[idx] = { ...this.nodes[idx], ...updatedFields };
-        this.saveState();
+      await this.saveState();
     }
   }
 
-  linkNodesManually(sourceId: string, targetId: string, label: string = "Related") {
+  async linkNodesManually(sourceId: string, targetId: string, label: string = "Related"): Promise<void> {
     if (sourceId === targetId) throw new Error("Cannot link node to itself");
     const edgeId = `manual-${sourceId}-${targetId}`;
     
@@ -389,11 +405,11 @@ class ProvenanceGraph {
         origin: 'manual',
         createdAt: Date.now()
       });
-   this.saveState();
+      await this.saveState();
     }
   }
 
-  removeLink(sourceId: string, targetId: string) {
+  async removeLink(sourceId: string, targetId: string): Promise<void> {
     const edgesToRemove = this.edges.filter(e => 
       (e.sourceId === sourceId && e.targetId === targetId) ||
       (e.sourceId === targetId && e.targetId === sourceId)
@@ -409,21 +425,21 @@ class ProvenanceGraph {
       !(e.sourceId === sourceId && e.targetId === targetId) &&
       !(e.sourceId === targetId && e.targetId === sourceId)
     );
-    this.saveState();
+    await this.saveState();
   }
 
   
-  deleteNode(id: string) {
+  async deleteNode(id: string): Promise<void> {
     this.nodes = this.nodes.filter(n => n.id !== id);
     this.edges = this.edges.filter(e => e.sourceId !== id && e.targetId !== id);
-    this.saveState();
+    await this.saveState();
   }
 
-  recalculateAutomaticLinks() {
+  async recalculateAutomaticLinks(): Promise<void> {
     // 1. Clear all existing automatic links except co_mentioned which are from extraction
     this.edges = this.edges.filter(e => e.origin === 'manual' || e.relationshipType === 'co_mentioned');
 
-    const JACCARD_THRESHOLD = 0.08; // Adjusted to be practical based on normalized multi-signal overlap
+    const JACCARD_THRESHOLD = 0.08;
     const MAX_LINKS = 8;
 
     const tokenizeConcepts = (arr: string[] = [], fallbackText: string = "") => {
@@ -438,7 +454,6 @@ class ProvenanceGraph {
       for(let s of arr) {
         s = normalize(s);
         if (s.length > 0) set.add(s);
-        // Add sub-words if multi-word concept
         const parts = s.split(/\s+/);
         if (parts.length > 1) {
           for(const p of parts) if (p.length > 3) set.add(p);
@@ -465,15 +480,12 @@ class ProvenanceGraph {
       return intersection / (a.size + b.size - intersection);
     };
 
-    // Calculate profiles with fallback extraction
     const profiles = this.nodes.map(n => {
       const sp = n.semanticProfile || { concepts: [], keywords: [], topics: [] };
-      
       let fallbackText = "";
       if (!sp.concepts || sp.concepts.length === 0) {
          fallbackText = `${n.canonicalName} ${n.structuredSummary?.overview || ''} ${n.structuredSummary?.keyTakeaways?.join(' ') || ''}`;
       }
-      
       return {
         id: n.id,
         concepts: tokenizeConcepts(sp.concepts || [], fallbackText),
@@ -483,40 +495,30 @@ class ProvenanceGraph {
     });
 
     const newEdges: any[] = [];
-    
     for (let i = 0; i < profiles.length; i++) {
-      let nodeEdges = [];
+      let nodeEdges: any[] = [];
       for (let j = i + 1; j < profiles.length; j++) {
         const p1 = profiles[i];
         const p2 = profiles[j];
-        
         if (this.suppressedLinks.has(this.getPairKey(p1.id, p2.id))) continue;
-        
         const hasManual = this.edges.some(e => 
           e.origin === 'manual' && 
           ((e.sourceId === p1.id && e.targetId === p2.id) || (e.sourceId === p2.id && e.targetId === p1.id))
         );
         if (hasManual) continue;
 
-        const conceptScore = calcJaccard(p1.concepts, p2.concepts);
-        const keywordScore = calcJaccard(p1.keywords, p2.keywords);
-        const topicScore = calcJaccard(p1.topics, p2.topics);
-
-        const score = (conceptScore * 0.6) + (keywordScore * 0.3) + (topicScore * 0.1);
-
+        const conceptSim = calcJaccard(p1.concepts, p2.concepts);
+        const keywordSim = calcJaccard(p1.keywords, p2.keywords);
+        const topicSim = calcJaccard(p1.topics, p2.topics);
+        const score = (conceptSim * 0.5) + (keywordSim * 0.25) + (topicSim * 0.25);
         if (score >= JACCARD_THRESHOLD) {
-          const reasons = [];
-          const sharedConcepts = Array.from(p1.concepts).filter(c => p2.concepts.has(c));
-          if (sharedConcepts.length > 0) {
-            // Capitalize for display
-            const displayConcepts = sharedConcepts.slice(0,3).map(c => c.charAt(0).toUpperCase() + c.slice(1));
-            reasons.push(`Shared concepts: ${displayConcepts.join(", ")}`);
-          } else if (score >= JACCARD_THRESHOLD) {
-             reasons.push("Semantic overlap in topics and keywords");
-          }
-          
+          const edgeId = `auto-${p1.id}-${p2.id}`;
+          const reasons: string[] = [];
+          if (conceptSim > 0) reasons.push('Shared concepts');
+          if (keywordSim > 0) reasons.push('Shared keywords');
+          if (topicSim > 0) reasons.push('Common topic');
           nodeEdges.push({
-            id: `semantic-${this.getPairKey(p1.id, p2.id)}`,
+            id: edgeId,
             sourceId: p1.id,
             targetId: p2.id,
             relationshipType: 'semantic_link',
@@ -527,17 +529,14 @@ class ProvenanceGraph {
           });
         }
       }
-      
       nodeEdges.sort((a, b) => b.confidence - a.confidence);
       newEdges.push(...nodeEdges.slice(0, MAX_LINKS));
     }
 
-    // Deduplicate edges before pushing
-    const edgeMap = new Map();
+    const edgeMap = new Map<string, any>();
     for (const e of newEdges) edgeMap.set(e.id, e);
-    
     this.edges.push(...Array.from(edgeMap.values()));
-    this.saveState();
+    await this.saveState();
   }
 
   getChainSummaries(nodeId: string): string[] {

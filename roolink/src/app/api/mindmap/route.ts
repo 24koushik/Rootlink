@@ -101,7 +101,7 @@ Do NOT use generic branches like "Document Content". Use real structural concept
         }
         
         targetNode.mindMap = mindMap;
-        globalGraph.updateNode(targetNode.id, targetNode);
+        await globalGraph.updateNode(targetNode.id, targetNode);
         return NextResponse.json({ success: true, generatedData: { mindMap } });
       } else {
         return NextResponse.json({ error: 'AI_REQUEST_FAILED', code: 'INVALID_JSON' }, { status: 400 });

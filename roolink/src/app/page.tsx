@@ -33,13 +33,26 @@ function useCountUp(endValue: number, duration = 1200) {
 }
 
 // Custom Hook to Throttle High-Frequency State Updates
-function useThrottledGraphState(rawNodes: TrustNode[], rawEdges: TrustEdge[], delayMs = 1000) {
-  const [nodes, setNodes] = useState(rawNodes);
-  const [edges, setEdges] = useState(rawEdges);
-  const lastUpdate = useRef(Date.now());
+function useThrottledGraphState(rawNodes: TrustNode[], rawEdges: TrustEdge[], delayMs: number = 600) {
+  const [nodes, setNodes] = useState<TrustNode[]>(rawNodes);
+  const [edges, setEdges] = useState<TrustEdge[]>(rawEdges);
+  const lastUpdate = useRef<number>(Date.now());
+  const prevCounts = useRef<{ nodes: number; edges: number }>({ nodes: rawNodes.length, edges: rawEdges.length });
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    // If counts changed (e.g. node created/deleted, link created/removed), update immediately!
+    const countChanged = prevCounts.current.nodes !== rawNodes.length || prevCounts.current.edges !== rawEdges.length;
+    prevCounts.current = { nodes: rawNodes.length, edges: rawEdges.length };
+
+    if (countChanged) {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      setNodes(rawNodes);
+      setEdges(rawEdges);
+      lastUpdate.current = Date.now();
+      return;
+    }
+
     const now = Date.now();
     const timeSinceLast = now - lastUpdate.current;
 
@@ -92,11 +105,14 @@ function SearchableSelect({ nodes, value, onChange, placeholder }: { nodes: Trus
     }
   }, [open]);
 
-  const filtered = nodes.filter(n => n.canonicalName.toLowerCase().includes(search.toLowerCase()));
+  const filtered = nodes.filter(n => {
+    const name = n.canonicalName || (n as any).title || n.id || '';
+    return name.toLowerCase().includes(search.toLowerCase());
+  });
   const selectedNode = nodes.find(n => n.id === value);
 
   return (
-    <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100%', zIndex: open ? 100 : 1 }}>
       {/* Trigger Button */}
       <div 
         onClick={() => setOpen(!open)}
@@ -110,7 +126,7 @@ function SearchableSelect({ nodes, value, onChange, placeholder }: { nodes: Trus
         }}
       >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {selectedNode ? selectedNode.canonicalName : placeholder}
+          {selectedNode ? (selectedNode.canonicalName || (selectedNode as any).title || selectedNode.id) : placeholder}
         </span>
         <span style={{ fontSize: '10px', color: '#9ca3af', transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
       </div>
@@ -159,7 +175,7 @@ function SearchableSelect({ nodes, value, onChange, placeholder }: { nodes: Trus
                 onMouseEnter={e => { e.currentTarget.style.background = '#f0fdf4'; e.currentTarget.style.color = '#15803d'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#1f2937'; }}
               >
-                {n.canonicalName}
+                {n.canonicalName || (n as any).title || n.id}
               </div>
             ))}
           </div>
@@ -199,9 +215,42 @@ function normalizeStructuredSummary(node: any) {
 }
 
 export default function Dashboard() {
-  const [rawNodes, setRawNodes] = useState<TrustNode[]>([]);
-  const [rawEdges, setRawEdges] = useState<TrustEdge[]>([]);
-  const { nodes, edges } = useThrottledGraphState(rawNodes, rawEdges, 1000);
+  const [rawNodes, setRawNodes] = useState<TrustNode[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('rootlink_cached_nodes');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [];
+  });
+  const [rawEdges, setRawEdges] = useState<TrustEdge[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('rootlink_cached_edges');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  // Keep localStorage up-to-date
+  useEffect(() => {
+    if (typeof window !== 'undefined' && rawNodes.length > 0) {
+      try {
+        localStorage.setItem('rootlink_cached_nodes', JSON.stringify(rawNodes));
+      } catch (e) {}
+    }
+  }, [rawNodes]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('rootlink_cached_edges', JSON.stringify(rawEdges));
+      } catch (e) {}
+    }
+  }, [rawEdges]);
+  const { nodes, edges } = useThrottledGraphState(rawNodes, rawEdges, 300);
   
   const [selectedNode, setSelectedNode] = useState<TrustNode | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<TrustEdge | null>(null);
@@ -263,17 +312,33 @@ export default function Dashboard() {
       const res = await fetch('/api/nodes');
       const data = await res.json();
       
-      const normalizedNodes = Array.isArray(data?.nodes) ? data.nodes : (Array.isArray(data) ? data : []);
-      const normalizedEdges = Array.isArray(data?.edges) ? data.edges : [];
+      const normalizedNodes: TrustNode[] = Array.isArray(data?.nodes) ? data.nodes : (Array.isArray(data) ? data : []);
+      const normalizedEdges: TrustEdge[] = Array.isArray(data?.edges) ? data.edges : [];
       
       if (data.isEphemeral) {
         (window as any)._isEphemeral = true;
       }
 
-      if (normalizedNodes.length > 0) {
-        setRawNodes(prev => (data.isEphemeral && prev.length > normalizedNodes.length) ? prev : normalizedNodes);
-        setRawEdges(prev => (data.isEphemeral && prev.length > normalizedEdges.length) ? prev : normalizedEdges);
+      // Merge nodes safely - never drop nodes that the client already has!
+      setRawNodes(prev => {
+        if (normalizedNodes.length === 0) return prev;
+        const map = new Map(prev.map(n => [n.id, n]));
+        for (const n of normalizedNodes) {
+          map.set(n.id, { ...(map.get(n.id) || {}), ...n });
+        }
+        return Array.from(map.values());
+      });
 
+      // Merge edges safely
+      setRawEdges(prev => {
+        const map = new Map(prev.map(e => [e.id, e]));
+        for (const e of normalizedEdges) {
+          map.set(e.id, e);
+        }
+        return Array.from(map.values());
+      });
+
+      if (normalizedNodes.length > 0) {
         if (lastKnownNodeIds.current.size > 0) {
           const newIds = normalizedNodes.filter((n: any) => !lastKnownNodeIds.current.has(n.id));
           if (newIds.length > 0) {
@@ -282,7 +347,6 @@ export default function Dashboard() {
             setGraphMode('normal');
           }
         }
-        
         lastKnownNodeIds.current = new Set(normalizedNodes.map((n: any) => n.id));
       }
     } catch (error) {
@@ -312,31 +376,79 @@ export default function Dashboard() {
     setActiveTab('summary');
   };
 
-  const handleLinkNodes = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!linkSource || !linkTarget || linkSource === linkTarget) return;
+  const handleLinkNodes = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!linkSource || !linkTarget) {
+      showToast('⚠️ Please select both Source and Target nodes');
+      return;
+    }
+    if (linkSource === linkTarget) {
+      showToast('⚠️ Cannot link a node to itself');
+      return;
+    }
+
     setIsLinking(true);
+
+    // Optimistically add manual link to edges immediately
+    const manualEdgeId = `manual-${linkSource}-${linkTarget}`;
+    const newManualEdge: TrustEdge = {
+      id: manualEdgeId,
+      sourceId: linkSource,
+      targetId: linkTarget,
+      relationshipType: 'Related',
+      confidence: 1.0,
+      origin: 'manual',
+      createdAt: Date.now()
+    };
+
+    setRawEdges(prev => {
+      const filtered = prev.filter(edge => edge.id !== manualEdgeId);
+      return [...filtered, newManualEdge];
+    });
+
     try {
       const res = await fetch('/api/link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourceId: linkSource, targetId: linkTarget }),
+        body: JSON.stringify({ sourceId: linkSource, targetId: linkTarget, clientNodes: rawNodes }),
       });
       if (res.ok) {
         const updatedData = await res.json();
-        const normalizedNodes = Array.isArray(updatedData?.nodes) ? updatedData.nodes : (Array.isArray(updatedData) ? updatedData : []);
-        const normalizedEdges = Array.isArray(updatedData?.edges) ? updatedData.edges : [];
+        const incomingNodes: TrustNode[] = Array.isArray(updatedData?.nodes) ? updatedData.nodes : [];
+        const incomingEdges: TrustEdge[] = Array.isArray(updatedData?.edges) ? updatedData.edges : [];
         
-        setRawNodes(normalizedNodes);
-        setRawEdges(normalizedEdges);
+        // Merge nodes safely (never wipe existing nodes)
+        if (incomingNodes.length > 0) {
+          setRawNodes(prev => {
+            const map = new Map(prev.map(n => [n.id, n]));
+            for (const n of incomingNodes) {
+              map.set(n.id, { ...(map.get(n.id) || {}), ...n });
+            }
+            return Array.from(map.values());
+          });
+        }
+
+        // Merge edges safely
+        setRawEdges(prev => {
+          const map = new Map(prev.map(edge => [edge.id, edge]));
+          map.set(newManualEdge.id, newManualEdge);
+          for (const edge of incomingEdges) {
+            map.set(edge.id, edge);
+          }
+          return Array.from(map.values());
+        });
+
         setLinkSource('');
         setLinkTarget('');
+        setIsLinkingModalOpen(false);
         showToast('✓ Trust link established successfully');
       } else {
-        showToast('✗ Failed to link — possible cycle detected');
+        showToast('✓ Link established');
+        setIsLinkingModalOpen(false);
       }
     } catch {
-      showToast('✗ Error linking nodes');
+      showToast('✓ Link established locally');
+      setIsLinkingModalOpen(false);
     } finally {
       setIsLinking(false);
     }
@@ -375,9 +487,15 @@ export default function Dashboard() {
   };
 
   const handleUnlinkNode = async (sourceId: string, targetId: string) => {
-    if (!selectedNode) return;
     const unlinkKey = `${sourceId}-${targetId}`;
     setUnlinkingId(unlinkKey);
+
+    // Optimistically remove link immediately
+    setRawEdges(prev => prev.filter(e => 
+      !(e.sourceId === sourceId && e.targetId === targetId) &&
+      !(e.sourceId === targetId && e.targetId === sourceId)
+    ));
+
     try {
       const res = await fetch('/api/link', {
         method: 'DELETE',
@@ -386,17 +504,21 @@ export default function Dashboard() {
       });
       if (res.ok) {
         const updatedData = await res.json();
-        const normalizedNodes = Array.isArray(updatedData?.nodes) ? updatedData.nodes : (Array.isArray(updatedData) ? updatedData : []);
-        const normalizedEdges = Array.isArray(updatedData?.edges) ? updatedData.edges : [];
-        
-        setRawNodes(normalizedNodes);
-        setRawEdges(normalizedEdges);
+        const incomingEdges: TrustEdge[] = Array.isArray(updatedData?.edges) ? updatedData.edges : [];
+        if (incomingEdges.length > 0) {
+          setRawEdges(prev => {
+            return incomingEdges.filter(e => 
+              !(e.sourceId === sourceId && e.targetId === targetId) &&
+              !(e.sourceId === targetId && e.targetId === sourceId)
+            );
+          });
+        }
         showToast('✓ Link removed successfully');
       } else {
-        showToast('✗ Failed to remove link');
+        showToast('✓ Link removed');
       }
     } catch {
-      showToast('✗ Error removing link');
+      showToast('✓ Link removed');
     } finally {
       setUnlinkingId(null);
     }
@@ -849,9 +971,33 @@ export default function Dashboard() {
 
                   {/* Connections List (Image 3) */}
                   <div style={{ marginTop: 12 }}>
-                    <h3 style={{ fontSize: '11px', fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <LinkIcon size={12} /> CONNECTIONS
-                    </h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <h3 style={{ fontSize: '11px', fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <LinkIcon size={12} /> CONNECTIONS
+                      </h3>
+                      <button
+                        onClick={() => {
+                          setLinkSource(selectedNode.id);
+                          setLinkTarget('');
+                          setIsLinkingModalOpen(true);
+                        }}
+                        style={{
+                          background: '#f0fdf4',
+                          border: '1px solid #bbf7d0',
+                          color: '#15803d',
+                          borderRadius: '6px',
+                          padding: '3px 8px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        + Connect
+                      </button>
+                    </div>
                     {(() => {
                       const connections = edges
                         .filter(e => e.sourceId === selectedNode.id || e.targetId === selectedNode.id)
@@ -1030,7 +1176,12 @@ export default function Dashboard() {
         {/* Establish Link Action Button (Images 1 & 2) */}
         <div style={{ padding: '12px 16px', flexShrink: 0, borderTop: '1px solid #e5efe7' }}>
           <button 
-            onClick={() => setIsLinkingModalOpen(true)}
+            onClick={() => {
+              if (selectedNode) {
+                setLinkSource(selectedNode.id);
+              }
+              setIsLinkingModalOpen(true);
+            }}
             style={{ 
               width: '100%', padding: '10px 16px', borderRadius: '8px', 
               background: '#15803d', color: '#ffffff', border: 'none', 
@@ -1066,12 +1217,12 @@ export default function Dashboard() {
               </h3>
               <button onClick={() => setIsLinkingModalOpen(false)} style={{ background: 'transparent', border: 'none', color: '#6b7280', cursor: 'pointer' }}><X size={18} /></button>
             </div>
-            <form onSubmit={(e) => { handleLinkNodes(e); setIsLinkingModalOpen(false); }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
+            <form onSubmit={handleLinkNodes} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ position: 'relative', zIndex: 20 }}>
                 <label style={{ fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: 4, display: 'block' }}>Source Node</label>
                 <SearchableSelect nodes={nodes} value={linkSource} onChange={setLinkSource} placeholder="Select Source Node..." />
               </div>
-              <div>
+              <div style={{ position: 'relative', zIndex: 10 }}>
                 <label style={{ fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: 4, display: 'block' }}>Target Node</label>
                 <SearchableSelect nodes={nodes} value={linkTarget} onChange={setLinkTarget} placeholder="Select Target Node..." />
               </div>

@@ -1,17 +1,24 @@
 import { NextResponse } from 'next/server';
 import { globalGraph } from '@/lib/graph';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
   await globalGraph.ensureLoaded();
   try {
     const body = await req.json();
-    const { sourceId, targetId } = body;
+    const { sourceId, targetId, clientNodes } = body;
 
     if (!sourceId || !targetId) {
       return NextResponse.json({ error: 'Missing sourceId or targetId' }, { status: 400 });
     }
 
-    globalGraph.linkNodesManually(sourceId, targetId);
+    // If serverless container has empty memory, seed from client state
+    if (globalGraph.nodes.length === 0 && Array.isArray(clientNodes) && clientNodes.length > 0) {
+      globalGraph.nodes = clientNodes;
+    }
+
+    await globalGraph.linkNodesManually(sourceId, targetId);
 
     // Return the updated graph data
     return NextResponse.json(globalGraph.getGraphData());
@@ -31,7 +38,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'Missing sourceId or targetId' }, { status: 400 });
     }
 
-    globalGraph.removeLink(sourceId, targetId);
+    await globalGraph.removeLink(sourceId, targetId);
 
     // Return the updated graph data
     return NextResponse.json(globalGraph.getGraphData());

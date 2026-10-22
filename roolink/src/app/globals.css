@@ -172,3 +172,21 @@ body {
     transform: scale(1.03);
   }
 }
+
+/* Highlighted and connected edges */
+.edge-path {
+  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+}
+
+.edge-highlighted {
+  stroke: #15803d !important;
+  stroke-width: 3.5px !important;
+  stroke-opacity: 1 !important;
+  filter: drop-shadow(0 0 4px rgba(21, 128, 61, 0.5));
+}
+
+.graph-connected .main-circle {
+  stroke: #10b981 !important;
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.4)) !important;
+}
